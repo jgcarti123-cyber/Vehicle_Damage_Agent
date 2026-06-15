@@ -304,13 +304,41 @@ Run `validate` and check the class distribution printout. If mirror_damage is un
 
 ## What "Done" Looks Like
 
-- [ ] `dataset.py` has 4 entries in DATASETS, all remapping to 5-class taxonomy
-- [ ] `dataset.py prepare` runs clean, all 5 classes appear in train/val/test splits
-- [ ] `config.yaml` has `nc: 5` and correct class names
-- [ ] `train.py` runs with new config, W&B logs 5-class metrics
-- [ ] `evaluate.py` reports per-class mAP for all 5 classes
-- [ ] `tests/test_stage1.py` passes with updated class count
-- [ ] mAP@50 > 0.50 overall (minimum), scratch class mAP > 0.40 (new class baseline)
+- [x] `dataset.py` has 4 entries in DATASETS, all remapping to 5-class taxonomy
+- [x] `dataset.py prepare` runs clean, all 5 classes appear in train/val/test splits
+- [x] `config.yaml` has `nc: 5` and correct class names
+- [x] `train.py` runs with new config, W&B logs 5-class metrics
+- [x] `evaluate.py` reports per-class mAP for all 5 classes
+- [x] `tests/test_stage1.py` passes with updated class count
+- [x] mAP@50 > 0.50 overall (minimum), scratch class mAP > 0.40 (new class baseline)
+
+---
+
+## Results (yolo11s-v2-5class, trained on Colab T4, 95 epochs)
+
+Test split (728 images, 1339 instances, never used for tuning):
+
+| Class | Images | Instances | P | R | mAP@50 | mAP@50-95 |
+|---|---|---|---|---|---|---|
+| all | 728 | 1339 | 0.722 | 0.664 | **0.705** | **0.485** |
+| dent | 503 | 789 | 0.656 | 0.475 | 0.542 | 0.273 |
+| scratch | 202 | 329 | 0.530 | 0.514 | 0.507 | 0.273 |
+| glass_damage | 99 | 99 | 0.939 | 0.879 | 0.922 | 0.772 |
+| light_damage | 108 | 112 | 0.757 | 0.752 | 0.787 | 0.571 |
+| mirror_damage | 10 | 10 | 0.727 | 0.700 | 0.769 | 0.533 |
+
+vs. v1 (4-class) baseline: mAP@50 0.515 → **0.705**, mAP@50-95 0.256 → **0.485**,
+recall 0.459 → **0.664**. The new `scratch` class clears its 0.40 target at 0.507.
+
+ONNX CPU latency: **35.7ms/image** (target <100ms).
+
+**Weakest classes:** `dent` and `scratch` (0.51-0.54 mAP@50) — despite being the
+most abundant classes by box count, they're visually ambiguous across the 4 pooled
+datasets' annotation styles. `glass_damage`, `light_damage`, and `mirror_damage`
+(despite being rarest) all score >0.75, since these damage types are visually
+distinctive even with less data.
+
+**Status: Stage 1 v2 complete.** This is the new baseline for Stage 2 crop generation.
 
 ## Key Decisions (Do Not Change Without Discussion)
 

@@ -53,7 +53,7 @@ python stage1_detection/train.py --quick
 python stage1_detection/train.py                      # full run from config.yaml
 
 # 6. Evaluate on the held-out TEST split
-python stage1_detection/evaluate.py --weights runs/detect/yolo11s-baseline/weights/best.pt
+python stage1_detection/evaluate.py --weights runs/detect/vehicle-damage-detection/yolo11s-v2-5class/weights/best.pt
 
 # 7. Inference -> DetectionResult JSON + annotated image + crops
 python stage1_detection/infer.py --weights <best.pt> --source <img-or-dir> --out outputs/
@@ -74,6 +74,25 @@ python stage1_detection/export.py --weights <best.pt> --benchmark
 | `infer.py` | single/batch inference -> `DetectionResult` + crops |
 | `export.py` | ONNX export + CPU benchmark |
 | `schemas.py` | Pydantic v2 output contract |
+
+## Results (yolo11s-v2-5class)
+
+Trained 95 epochs on Colab T4, evaluated on the held-out test split (728 images):
+
+| Class | mAP@50 | mAP@50-95 |
+|---|---|---|
+| all | **0.705** | **0.485** |
+| dent | 0.542 | 0.273 |
+| scratch | 0.507 | 0.273 |
+| glass_damage | 0.922 | 0.772 |
+| light_damage | 0.787 | 0.571 |
+| mirror_damage | 0.769 | 0.533 |
+
+Precision=0.722, recall=0.664. ONNX CPU latency: 35.7ms/image. `dent` and
+`scratch` are the weakest classes despite being the most abundant — see
+`../taxonomy-v2-CLAUDE.md` for analysis. Weights live in
+`runs/detect/vehicle-damage-detection/yolo11s-v2-5class/` (gitignored; copy
+from the Colab run's artifact zip).
 
 ## Notes
 
