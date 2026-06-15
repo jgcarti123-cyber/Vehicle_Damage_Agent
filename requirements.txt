@@ -13,7 +13,8 @@ albumentations==2.0.8        # offline preprocessing pipeline
 opencv-python==4.13.0.92     # image I/O + preprocessing
 numpy>=1.26,<2.3
 pyyaml>=6.0                  # config.yaml loading
-roboflow>=1.1.50            # CarDD dataset download
+roboflow>=1.1.50            # sindhu/nivethetha/damagelocation dataset downloads
+kagglehub>=0.3              # CarDD dataset download
 
 # --- Schemas / API (Stage 5 prep) ---
 pydantic==2.13.4             # v2 output schemas

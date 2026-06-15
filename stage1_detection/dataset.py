@@ -94,6 +94,7 @@ class DatasetConfig(TypedDict, total=False):
     source_classes: list[str]
     class_remap: dict[int, int]
     raw_splits: tuple[str, ...]
+    kaggle_dataset: str   # "<owner>/<dataset-slug>" for kagglehub auto-download
 
 
 DATASETS: list[DatasetConfig] = [
@@ -160,7 +161,8 @@ DATASETS: list[DatasetConfig] = [
     # ------------------------------------------------------------------
     {
         "name": "cardd_yolo",
-        "workspace": None,   # pre-downloaded manually into data/raw/cardd_yolo/
+        "workspace": None,   # not Roboflow; fetched via kagglehub (see download())
+        "kaggle_dataset": "gabrielfcarvalho/cardd-with-yolo-annotations-images-labels",
         "source_classes": [
             "dent",           # 0
             "scratch",        # 1
@@ -314,10 +316,26 @@ def _remap_label_text(raw_text: str, class_remap: dict[int, int]) -> str:
 # Public commands
 # ---------------------------------------------------------------------------
 
-def download() -> None:
-    """Download every Roboflow dataset in DATASETS into data/raw/<name>/.
+def _download_kaggle(ds: DatasetConfig) -> None:
+    """Fetch a Kaggle dataset via kagglehub and symlink it into data/raw/<name>/.
 
-    Datasets with workspace=None (e.g. Kaggle) are skipped — fetch those
+    Requires KAGGLE_USERNAME and KAGGLE_KEY in the environment (.env).
+    """
+    import kagglehub
+
+    dest = _raw_dir(ds)
+    print(f"[{ds['name']}] Downloading Kaggle dataset {ds['kaggle_dataset']} ...")
+    cache_path = Path(kagglehub.dataset_download(ds["kaggle_dataset"]))
+    dest.symlink_to(cache_path, target_is_directory=True)
+    print(f"[{ds['name']}] Linked {dest} -> {cache_path}")
+
+
+def download() -> None:
+    """Download every dataset in DATASETS into data/raw/<name>/.
+
+    Roboflow datasets are pulled via the Roboflow API (ROBOFLOW_API_KEY).
+    Datasets with a `kaggle_dataset` slug are pulled via kagglehub
+    (KAGGLE_USERNAME / KAGGLE_KEY). Datasets with neither must be placed
     manually into data/raw/<name>/ before running 'prepare'.
     """
     from roboflow import Roboflow
@@ -328,8 +346,13 @@ def download() -> None:
     for ds in DATASETS:
         if ds.get("workspace") is None:
             dest = _raw_dir(ds)
-            status = "found" if dest.exists() else "MISSING — download manually"
-            print(f"[{ds['name']}] Not a Roboflow dataset — {status} at {dest}")
+            if dest.exists():
+                print(f"[{ds['name']}] Already present at {dest} — skipping.")
+                continue
+            if ds.get("kaggle_dataset"):
+                _download_kaggle(ds)
+            else:
+                print(f"[{ds['name']}] MISSING — download manually into {dest}")
             continue
 
         dest = _raw_dir(ds)

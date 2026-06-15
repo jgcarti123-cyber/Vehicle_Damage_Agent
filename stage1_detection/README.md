@@ -28,14 +28,15 @@ Roboflow `nivethetha/car-damages-godhu` v1, Roboflow
 ```bash
 python3.11 -m venv venv311 && source venv311/bin/activate
 pip install -U pip && pip install -r requirements.txt
-cp .env.example .env          # then fill ROBOFLOW_API_KEY (and WANDB_API_KEY)
+cp .env.example .env          # then fill ROBOFLOW_API_KEY, KAGGLE_USERNAME/KAGGLE_KEY (and WANDB_API_KEY)
 ```
 
 ## Pipeline
 
 ```bash
-# 1. Download Roboflow datasets (reads ROBOFLOW_API_KEY from .env).
-#    CarDD (Kaggle) must be downloaded manually into data/raw/cardd_yolo/.
+# 1. Download all datasets: sindhu/nivethetha/damagelocation via Roboflow
+#    (reads ROBOFLOW_API_KEY from .env), CarDD via kagglehub
+#    (reads KAGGLE_USERNAME/KAGGLE_KEY from .env).
 python stage1_detection/dataset.py download
 
 # 2. Pool all datasets, remap to the 5-class taxonomy, re-split 80/10/10 stratified
