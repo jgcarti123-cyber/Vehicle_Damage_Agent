@@ -21,7 +21,7 @@ names:
   3: mirror_damage
 
 # --- Training hyperparameters (baseline; tune after first run) ---
-model: yolo11s.pt        # n < s < m < l < x; upgrade only if mAP plateaus
+model: yolo11m.pt        # n < s < m < l < x; upgraded from s to lift recall
 epochs: 100
 imgsz: 640
 batch: 16
@@ -50,4 +50,4 @@ mixup: 0.1
 
 # --- Logging ---
 project: vehicle-damage-detection
-name: yolo11s-baseline
+name: yolo11m-baseline
