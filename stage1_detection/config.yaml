@@ -21,7 +21,7 @@ names:
   4: mirror_damage
 
 # --- Training hyperparameters (baseline; tune after first run) ---
-model: yolo11m.pt        # n < s < m < l < x
+model: yolo11s.pt        # n < s < m < l < x
 epochs: 100
 imgsz: 640
 batch: 16
@@ -50,4 +50,4 @@ mixup: 0.1
 
 # --- Logging ---
 project: vehicle-damage-detection
-name: yolo11m-v2-5class
+name: yolo11s-v2-5class
