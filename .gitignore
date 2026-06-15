@@ -1,0 +1,31 @@
+# --- Secrets ---
+.env
+*.env
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Virtual envs ---
+venv/
+venv311/
+.venv/
+
+# --- Data & model artifacts (large; do not commit) ---
+data/raw/
+data/processed/
+data/splits/
+!data/**/.gitkeep
+runs/
+wandb/
+outputs/
+*.pt
+*.onnx
+stage1_detection/_dataset.yaml
+
+# --- OS ---
+.DS_Store

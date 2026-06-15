@@ -1,0 +1,35 @@
+# Vehicle Damage Assessment Agent — Stage 1 (Detection)
+# Python 3.11+ required. Install into a fresh venv:
+#   python3.11 -m venv venv311 && source venv311/bin/activate
+#   pip install -U pip && pip install -r requirements.txt
+
+# --- Core training / inference ---
+ultralytics==8.4.67          # YOLOv11 training + inference
+torch==2.8.0                 # backend (MPS on Apple Silicon, CUDA elsewhere)
+torchvision==0.23.0
+
+# --- Data / preprocessing ---
+albumentations==2.0.8        # offline preprocessing pipeline
+opencv-python==4.13.0.92     # image I/O + preprocessing
+numpy>=1.26,<2.3
+pyyaml>=6.0                  # config.yaml loading
+roboflow>=1.1.50            # CarDD dataset download
+
+# --- Schemas / API (Stage 5 prep) ---
+pydantic==2.13.4             # v2 output schemas
+fastapi==0.128.8             # inference API
+uvicorn[standard]>=0.30      # ASGI server for FastAPI
+
+# --- Experiment tracking ---
+wandb==0.26.1
+
+# --- Production export ---
+onnx>=1.16                  # ONNX graph
+onnxruntime>=1.18           # CPU inference benchmark
+onnxslim>=0.1.34            # graph simplification (replaces onnx-simplifier)
+
+# --- Config / utilities ---
+python-dotenv>=1.0          # load .env (paths + secrets)
+
+# --- Testing ---
+pytest>=8.0

@@ -1,0 +1,53 @@
+# Stage 1 — Damage Detection config (Ultralytics dataset + training)
+#
+# NOTE: Classes are 4 damage-TYPE buckets merged from the Roboflow
+# "sindhu/car_dent_scratch_detection-1" v9 dataset, whose native 17 labels are
+# location-based (front-bumper-dent, roof-dent, Headlight-Damage, ...). The merge
+# map lives in dataset.py (CLASS_MERGE_MAP). This supersedes the spec's original
+# 6-class list. See CLAUDE.md "Key Design Decisions".
+
+# --- Dataset (paths are relative to this config file's location) ---
+path: ../data/splits
+train: train/images
+val: val/images
+test: test/images
+
+# --- Classes (4 merged damage-type buckets) ---
+nc: 4
+names:
+  0: dent
+  1: glass_damage
+  2: light_damage
+  3: mirror_damage
+
+# --- Training hyperparameters (baseline; tune after first run) ---
+model: yolo11s.pt        # n < s < m < l < x; upgrade only if mAP plateaus
+epochs: 100
+imgsz: 640
+batch: 16
+lr0: 0.01
+lrf: 0.1
+momentum: 0.937
+weight_decay: 0.0005
+warmup_epochs: 3
+patience: 20             # early stopping
+save_period: 10
+workers: 4
+device: mps             # Apple Silicon; override to 0 (CUDA) or cpu as needed
+
+# --- Augmentation (Ultralytics built-in; albumentations runs offline) ---
+hsv_h: 0.015
+hsv_s: 0.7
+hsv_v: 0.4
+degrees: 10.0
+translate: 0.1
+scale: 0.5
+shear: 2.0
+flipud: 0.0
+fliplr: 0.5
+mosaic: 1.0
+mixup: 0.1
+
+# --- Logging ---
+project: vehicle-damage-detection
+name: yolo11s-baseline
