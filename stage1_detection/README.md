@@ -6,17 +6,22 @@ bounding boxes + damage-type labels + confidence, packaged as a Pydantic
 
 ## Classes
 
-The detector predicts **4 damage-type buckets**, merged from the Roboflow
-[`sindhu/car_dent_scratch_detection-1` v9](https://universe.roboflow.com/sindhu/car_dent_scratch_detection-1/dataset/9)
-dataset (whose native 17 labels are *location*-based). The merge map lives in
-[`dataset.py`](dataset.py) (`CLASS_MERGE_MAP`).
+The detector predicts **5 damage-type buckets**, pooled from 4 source
+datasets (Roboflow `sindhu/car_dent_scratch_detection-1` v9, Kaggle CarDD,
+Roboflow `nivethetha/car-damages-godhu` v1, Roboflow
+`damagedetection-hloj4/damagelocation` v7). Per-dataset class remaps live in
+[`dataset.py`](dataset.py) (`DATASETS` registry). See
+`../taxonomy-v2-CLAUDE.md` for the full rationale.
 
-| id | class | merged from |
+| id | class | primary sources |
 |----|-------|-------------|
-| 0 | `dent` | all 13 `*-dent` location classes |
-| 1 | `glass_damage` | front + rear windscreen damage |
-| 2 | `light_damage` | headlight, taillight, signlight damage |
-| 3 | `mirror_damage` | sidemirror damage |
+| 0 | `dent` | all datasets (incl. CarDD `crack`, merged in) |
+| 1 | `scratch` | CarDD (primary), nivethetha |
+| 2 | `glass_damage` | sindhu, CarDD `glass shatter`, nivethetha |
+| 3 | `light_damage` | sindhu, CarDD `lamp broken`, nivethetha |
+| 4 | `mirror_damage` | sindhu only — rarest class (87 boxes total) |
+
+`tire_flat` (CarDD) is dropped — not a collision-damage class.
 
 ## Setup
 
@@ -29,10 +34,11 @@ cp .env.example .env          # then fill ROBOFLOW_API_KEY (and WANDB_API_KEY)
 ## Pipeline
 
 ```bash
-# 1. Download dataset from Roboflow (reads ROBOFLOW_API_KEY from .env)
+# 1. Download Roboflow datasets (reads ROBOFLOW_API_KEY from .env).
+#    CarDD (Kaggle) must be downloaded manually into data/raw/cardd_yolo/.
 python stage1_detection/dataset.py download
 
-# 2. Remap 17->4 classes and re-split 80/10/10 stratified into data/splits/
+# 2. Pool all datasets, remap to the 5-class taxonomy, re-split 80/10/10 stratified
 python stage1_detection/dataset.py prepare
 
 # 3. Validate image/label pairing + class distribution
@@ -73,7 +79,8 @@ python stage1_detection/export.py --weights <best.pt> --benchmark
 - **Device:** training defaults to `mps` (Apple Silicon). Override with
   `--device cpu` or `--device 0` (CUDA). `PYTORCH_ENABLE_MPS_FALLBACK=1` is set
   so unsupported MPS ops fall back to CPU.
-- **Class imbalance:** `dent` ≈83% of boxes; `mirror_damage` is rarest (87
-  boxes). Expect lower per-class mAP on the minority classes at baseline.
+- **Class imbalance:** `dent` ≈58% of boxes; `mirror_damage` is rarest (87
+  boxes total, sindhu only). Expect lower per-class mAP on `mirror_damage`
+  at baseline — it's structurally limited by available data.
 - **Test split is held out** — only run `evaluate.py` on it after training; never
   tune against it.

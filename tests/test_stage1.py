@@ -69,22 +69,32 @@ def test_config_classes_match_target_taxonomy():
 
 
 # --- Class merge -----------------------------------------------------------
-def test_merge_map_covers_all_source_classes():
-    assert set(dataset.CLASS_MERGE_MAP.keys()) == set(range(len(dataset.SOURCE_CLASS_NAMES)))
-
-
-def test_merge_targets_in_range():
-    n = len(dataset.TARGET_CLASS_NAMES)
-    assert all(0 <= v < n for v in dataset.CLASS_MERGE_MAP.values())
+def test_dataset_remaps_are_consistent():
+    n_target = len(dataset.TARGET_CLASS_NAMES)
+    for ds in dataset.DATASETS:
+        n_source = len(ds["source_classes"])
+        for src_id, tgt_id in ds["class_remap"].items():
+            assert 0 <= src_id < n_source, f"{ds['name']}: bad source id {src_id}"
+            assert 0 <= tgt_id < n_target, f"{ds['name']}: bad target id {tgt_id}"
 
 
 def test_remap_label_text():
-    # source id 12 (front-bumper-dent) -> dent(0); id 2 (Headlight) -> light_damage(2)
+    # sindhu_v9: id 12 (front-bumper-dent) -> dent(0); id 2 (Headlight-Damage) -> light_damage(3)
+    sindhu = next(ds for ds in dataset.DATASETS if ds["name"] == "sindhu_v9")
     raw = "12 0.5 0.5 0.2 0.2\n2 0.1 0.1 0.05 0.05\n"
-    out = dataset._remap_label_text(raw)
+    out = dataset._remap_label_text(raw, sindhu["class_remap"])
     lines = out.splitlines()
     assert lines[0].startswith("0 ")
-    assert lines[1].startswith("2 ")
+    assert lines[1].startswith("3 ")
+
+
+def test_cardd_tire_flat_is_dropped():
+    cardd = next(ds for ds in dataset.DATASETS if ds["name"] == "cardd_yolo")
+    raw = "5 0.5 0.5 0.2 0.2\n1 0.1 0.1 0.05 0.05\n"
+    out = dataset._remap_label_text(raw, cardd["class_remap"])
+    lines = out.splitlines()
+    assert len(lines) == 1
+    assert lines[0].startswith("1 ")  # scratch
 
 
 # --- Data splits (skip gracefully if data not prepared) --------------------
