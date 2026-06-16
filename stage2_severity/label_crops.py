@@ -130,6 +130,10 @@ def _init_client(api_key: str):
     return genai.Client(api_key=api_key)
 
 
+class DailyQuotaExhausted(Exception):
+    """Raised when the daily request quota is exhausted — stop the run."""
+
+
 def _label_one(client, crop_path: Path, model_name: str) -> dict:
     from PIL import Image as PILImage
 
@@ -138,10 +142,31 @@ def _label_one(client, crop_path: Path, model_name: str) -> dict:
     prompt = PROMPT_TEMPLATE.format(damage_type=damage_type)
     img = PILImage.open(str(crop_path))
 
-    response = client.models.generate_content(
-        model=model_name,
-        contents=[prompt, img],
-    )
+    # Retry on 503 (transient overload) with exponential back-off.
+    last_exc: Exception | None = None
+    for attempt, backoff in enumerate([0, 15, 30, 60]):
+        if backoff:
+            time.sleep(backoff)
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[prompt, img],
+            )
+            break
+        except Exception as e:
+            msg = str(e)
+            if "503" in msg:
+                last_exc = e
+                continue  # retry
+            if "429" in msg and "PerDay" in msg:
+                raise DailyQuotaExhausted(
+                    f"Daily quota exhausted for {model_name}. "
+                    "Resume tomorrow or enable billing on your Google Cloud project."
+                ) from e
+            raise  # any other error (400, 404, auth …) is not retryable
+    else:
+        raise last_exc  # all retries failed
+
     text = response.text.strip()
 
     # Strip markdown code fences if present.
@@ -249,6 +274,10 @@ def label_command(args: argparse.Namespace) -> None:
                 })
                 out_f.flush()
                 n_ok += 1
+            except DailyQuotaExhausted as e:
+                print(f"\n[STOP] {e}")
+                print(f"Progress saved. Re-run tomorrow to continue from crop {i}/{total}.")
+                break
             except Exception as e:
                 err_writer.writerow({"crop_path": str(crop_path), "error": str(e)})
                 err_f.flush()
