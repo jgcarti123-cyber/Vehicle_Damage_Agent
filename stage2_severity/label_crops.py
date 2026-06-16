@@ -45,7 +45,7 @@ DEFAULT_TARGETS: dict[int, int | None] = {
 }
 
 # Gemini model preference — tries 2.0 first, falls back to 1.5.
-GEMINI_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"]
+GEMINI_MODEL = "gemini-2.5-flash"
 
 PROMPT_TEMPLATE = """\
 You are a vehicle damage assessor. Rate the severity of the damage visible in this crop.
@@ -122,25 +122,26 @@ def build_sample(
 
 
 # ---------------------------------------------------------------------------
-# Gemini API
+# Gemini API  (google-genai >= 1.0)
 # ---------------------------------------------------------------------------
 
-def _init_gemini(api_key: str):
-    import google.generativeai as genai
-    genai.configure(api_key=api_key)
-    return genai
+def _init_client(api_key: str):
+    from google import genai
+    return genai.Client(api_key=api_key)
 
 
-def _label_one(genai, crop_path: Path, model_name: str) -> dict:
+def _label_one(client, crop_path: Path, model_name: str) -> dict:
     from PIL import Image as PILImage
 
     cls_id = _class_id(crop_path)
     damage_type = CLASS_NAMES.get(cls_id, "unknown")
     prompt = PROMPT_TEMPLATE.format(damage_type=damage_type)
-
     img = PILImage.open(str(crop_path))
-    model = genai.GenerativeModel(model_name)
-    response = model.generate_content([prompt, img])
+
+    response = client.models.generate_content(
+        model=model_name,
+        contents=[prompt, img],
+    )
     text = response.text.strip()
 
     # Strip markdown code fences if present.
@@ -159,20 +160,6 @@ def _label_one(genai, crop_path: Path, model_name: str) -> dict:
         "reasoning": str(data.get("reasoning", "")),
         "model": model_name,
     }
-
-
-def _pick_model(genai, api_key: str) -> str:
-    """Try each model in preference order; return the first that responds."""
-    import google.generativeai as genai_mod
-    genai_mod.configure(api_key=api_key)
-    for name in GEMINI_MODELS:
-        try:
-            m = genai_mod.GenerativeModel(name)
-            m.generate_content("ping")
-            return name
-        except Exception:
-            continue
-    raise RuntimeError(f"No accessible Gemini model from: {GEMINI_MODELS}")
 
 
 # ---------------------------------------------------------------------------
@@ -227,10 +214,8 @@ def label_command(args: argparse.Namespace) -> None:
 
     # Init Gemini
     print("Connecting to Gemini ...")
-    genai = _init_gemini(api_key)
-    model_name = args.model
-    if model_name == "auto":
-        model_name = _pick_model(genai, api_key)
+    client = _init_client(api_key)
+    model_name = args.model if args.model != "auto" else GEMINI_MODEL
     print(f"Model: {model_name}  |  rate-sleep: {args.rate_sleep}s  |  todo: {len(remaining)}")
 
     # Open CSV for appending
@@ -255,7 +240,7 @@ def label_command(args: argparse.Namespace) -> None:
             cls_id = _class_id(crop_path)
             damage_type = CLASS_NAMES.get(cls_id, "unknown")
             try:
-                result = _label_one(genai, crop_path, model_name)
+                result = _label_one(client, crop_path, model_name)
                 writer.writerow({
                     "crop_path": str(crop_path),
                     "image_stem": crop_path.parent.name,
