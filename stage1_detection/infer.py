@@ -29,7 +29,7 @@ def _gather_images(source: Path) -> list[Path]:
 
 
 def infer_image(model, image_path: Path, out_dir: Path, conf: float,
-                model_version: str) -> DetectionResult:
+                model_version: str, annotate: bool = True) -> DetectionResult:
     """Run detection on one image, save annotated image + crops, return result."""
     image = cv2.imread(str(image_path))
     if image is None:
@@ -68,10 +68,11 @@ def infer_image(model, image_path: Path, out_dir: Path, conf: float,
             )
         )
 
-    # Save annotated image.
+    # Save annotated image (skip with --no-annotate for bulk crop-generation runs).
     out_dir.mkdir(parents=True, exist_ok=True)
-    annotated_path = out_dir / f"{image_path.stem}_annotated.jpg"
-    cv2.imwrite(str(annotated_path), result.plot())
+    if annotate:
+        annotated_path = out_dir / f"{image_path.stem}_annotated.jpg"
+        cv2.imwrite(str(annotated_path), result.plot())
 
     return DetectionResult(
         image_path=str(image_path),
@@ -85,17 +86,22 @@ def infer_image(model, image_path: Path, out_dir: Path, conf: float,
 
 
 def run(weights: Path, source: Path, out_dir: Path, conf: float,
-        device: str | None = None) -> list[DetectionResult]:
+        device: str | None = None, annotate: bool = True) -> list[DetectionResult]:
     from ultralytics import YOLO
 
     model = YOLO(str(weights))
     if device:
         model.to(device)
+    images = _gather_images(source)
     results: list[DetectionResult] = []
-    for img in _gather_images(source):
-        res = infer_image(model, img, out_dir, conf, model_version=weights.name)
-        (out_dir / f"{img.stem}.json").write_text(res.model_dump_json(indent=2))
-        print(f"{img.name}: {res.num_damages} damage(s) in {res.inference_time_ms:.1f}ms")
+    for i, img in enumerate(images, 1):
+        res = infer_image(model, img, out_dir, conf, model_version=weights.name,
+                          annotate=annotate)
+        if annotate:
+            (out_dir / f"{img.stem}.json").write_text(res.model_dump_json(indent=2))
+        if i % 100 == 0 or i == len(images):
+            print(f"[{i}/{len(images)}] {img.name}: {res.num_damages} damage(s) "
+                  f"in {res.inference_time_ms:.1f}ms")
         results.append(res)
     return results
 
@@ -107,9 +113,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out", type=Path, default=Path("outputs"))
     p.add_argument("--conf", type=float, default=0.25)
     p.add_argument("--device", type=str, default=None)
+    p.add_argument("--no-annotate", action="store_true",
+                   help="skip annotated image + JSON output (faster bulk crop generation)")
     return p.parse_args()
 
 
 if __name__ == "__main__":
     a = parse_args()
-    run(a.weights, a.source, a.out, a.conf, a.device)
+    run(a.weights, a.source, a.out, a.conf, a.device, annotate=not a.no_annotate)
