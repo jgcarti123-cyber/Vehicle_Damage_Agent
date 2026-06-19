@@ -70,22 +70,24 @@ ROUTING_ORDER = ["auto_classify", "suggest_human_confirm", "human_review"]
 #
 # The per-crop classifier only sees one region at a time — it cannot tell that
 # a "moderate" crop is one of several damages on a destroyed front-end. Insurers
-# assess severity at the VEHICLE level: repair costs accumulate across damaged
-# components. We mirror that with a damage-score that sums per-component severity.
+# assess severity at the VEHICLE level, which is why the whole-image VLM is the
+# authoritative judge for the moderate↔severe call.
 #
-# Severity is driven ONLY by the damage score (actual per-component severity,
-# accumulated). Area coverage is computed for transparency but deliberately does
-# NOT drive the decision — it depends entirely on how zoomed-in the photo is (a
-# close-up of two small scratches can fill 60% of the frame), which would wrongly
-# escalate purely cosmetic damage. Many real scratches still escalate via the
-# score (each mild = 1 point), independent of framing.
+# The damage-score escalates the mild→MODERATE step only. SEVERE is never inferred
+# from the score: piling up MODERATE components (e.g. bumper + headlight + fender on
+# a repairable front-corner hit) is still a repairable car, NOT a write-off. A
+# vehicle reads SEVERE only on hard evidence — a crop the classifier labels severe,
+# a crop with heavy severe probability (soft-severe), or the VLM judging it
+# severe/total-loss. Area coverage is computed for transparency but deliberately
+# does NOT drive the decision (it depends on how zoomed-in the photo is).
 # ---------------------------------------------------------------------------
 
 # Points roughly proportional to repair cost per damaged component.
 SEVERITY_POINTS = {"mild": 1, "moderate": 3, "severe": 8}
 
-# Total damage score thresholds (sum of per-region points).
-SCORE_SEVERE   = 9    # e.g. 3 moderate components, or 1 severe + extras
+# Damage-score threshold for the mild→moderate step (sum of per-region points).
+# There is deliberately NO score threshold for SEVERE (see note above) — that
+# call belongs to hard per-crop evidence and the whole-image VLM.
 SCORE_MODERATE = 5    # e.g. 2 moderate, or ~5 mild scratches adding up
 
 # Soft-severe trigger: if the per-crop model puts at least this much probability on
@@ -588,9 +590,11 @@ def aggregate_severity(regions: list["RegionResult"], image_w: int, image_h: int
     )
     soft_severe = max_severe_prob >= SEVERE_PROB_TRIGGER
 
-    # Severity is driven by per-crop severity, soft-severe probability, and the
-    # accumulated damage score. Coverage is reported but never escalates.
-    if counts.get("severe", 0) >= 1 or soft_severe or score >= SCORE_SEVERE:
+    # SEVERE only on hard evidence: a crop the classifier labels severe, or a crop
+    # carrying heavy severe probability (soft-severe). The damage score escalates the
+    # mild→moderate step ONLY — many moderate components is a repairable car, not a
+    # write-off (the whole-image VLM is the judge for vehicle-level severe).
+    if counts.get("severe", 0) >= 1 or soft_severe:
         overall = "severe"
     elif counts.get("moderate", 0) >= 1 or score >= SCORE_MODERATE:
         overall = "moderate"
@@ -611,8 +615,6 @@ def aggregate_severity(regions: list["RegionResult"], image_w: int, image_h: int
     # Note the dominant driver of the result.
     if soft_severe and counts.get("severe", 0) == 0:
         driver = f"a region reads {max_severe_prob:.0%} likely severe"
-    elif score >= SCORE_SEVERE and counts.get("severe", 0) == 0:
-        driver = f"damage score {score} across components"
     else:
         driver = f"damage score {score}"
     if escalated:
