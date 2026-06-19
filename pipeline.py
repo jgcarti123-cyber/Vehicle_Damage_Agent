@@ -73,11 +73,12 @@ ROUTING_ORDER = ["auto_classify", "suggest_human_confirm", "human_review"]
 # assess severity at the VEHICLE level: repair costs accumulate across damaged
 # components. We mirror that with a damage-score that sums per-component severity.
 #
-# IMPORTANT — escalating to SEVERE requires actual evidence of severity (a severe
-# crop, or enough moderate+ damage to cross the score threshold). Area coverage is
-# NOT used to reach severe: it depends on how zoomed-in the photo is (a close-up of
-# one small scratch can fill the frame), so a pile of purely cosmetic damage must
-# never read as severe. Coverage may only nudge mild -> moderate.
+# Severity is driven ONLY by the damage score (actual per-component severity,
+# accumulated). Area coverage is computed for transparency but deliberately does
+# NOT drive the decision — it depends entirely on how zoomed-in the photo is (a
+# close-up of two small scratches can fill 60% of the frame), which would wrongly
+# escalate purely cosmetic damage. Many real scratches still escalate via the
+# score (each mild = 1 point), independent of framing.
 # ---------------------------------------------------------------------------
 
 # Points roughly proportional to repair cost per damaged component.
@@ -85,7 +86,7 @@ SEVERITY_POINTS = {"mild": 1, "moderate": 3, "severe": 8}
 
 # Total damage score thresholds (sum of per-region points).
 SCORE_SEVERE   = 12   # e.g. 4 moderate components, or 1 severe + extras
-SCORE_MODERATE = 5    # e.g. 2 moderate, or several mild adding up
+SCORE_MODERATE = 5    # e.g. 2 moderate, or ~5 mild scratches adding up
 
 # Coverage can bump mild -> moderate only (never severe — see note above).
 COVERAGE_MODERATE = 0.35
@@ -182,9 +183,9 @@ def _union_coverage(regions: list["RegionResult"], image_w: int, image_h: int) -
 def aggregate_severity(regions: list["RegionResult"], image_w: int, image_h: int) -> Aggregation:
     """Roll per-crop severities up to a vehicle-level severity.
 
-    Escalates beyond the worst single crop when damage is widespread: many
-    damaged components (damage_score) or a large damaged area (coverage) both
-    push toward severe / total-loss, mirroring how insurers sum repair costs."""
+    Escalates beyond the worst single crop when damage accumulates across many
+    components (damage_score), mirroring how insurers sum repair costs. Coverage
+    is reported for context but does not drive the decision (framing-dependent)."""
     scored = [r for r in regions if r.severity]
     if not scored:
         return Aggregation(overall="unknown", damage_score=0, coverage=0.0, counts={},
@@ -197,13 +198,11 @@ def aggregate_severity(regions: list["RegionResult"], image_w: int, image_h: int
     coverage = _union_coverage(scored, image_w, image_h)
     worst  = worst_severity(sevs)
 
-    # SEVERE requires real severity evidence — a severe crop or enough accumulated
-    # moderate+ damage. Coverage is deliberately NOT a path to severe (framing-dependent).
+    # Severity is driven purely by accumulated damage score + per-crop severity.
+    # Coverage is reported but never escalates (framing-dependent, see note above).
     if counts.get("severe", 0) >= 1 or score >= SCORE_SEVERE:
         overall = "severe"
-    # MODERATE from a moderate crop, accumulated score, or a large affected area
-    # (a fully scuffed panel costs more to repaint — but caps at moderate).
-    elif counts.get("moderate", 0) >= 1 or score >= SCORE_MODERATE or coverage >= COVERAGE_MODERATE:
+    elif counts.get("moderate", 0) >= 1 or score >= SCORE_MODERATE:
         overall = "moderate"
     else:
         overall = "mild"
@@ -220,12 +219,12 @@ def aggregate_severity(regions: list["RegionResult"], image_w: int, image_h: int
         parts.append(f"{counts['mild']} mild region(s)")
     detail = ", ".join(parts)
     if escalated:
-        reason = (f"{len(scored)} damages ({detail}); damage score {score}, "
-                  f"{coverage:.0%} of vehicle area affected → escalated to "
-                  f"{overall.upper()} (worst single crop was {worst}).")
+        reason = (f"{len(scored)} damages ({detail}); damage score {score} "
+                  f"(~{coverage:.0%} of frame) → escalated to {overall.upper()} "
+                  f"(worst single crop was {worst}).")
     else:
-        reason = (f"{len(scored)} damages ({detail}); damage score {score}, "
-                  f"{coverage:.0%} of vehicle area affected → {overall.upper()}.")
+        reason = (f"{len(scored)} damages ({detail}); damage score {score} "
+                  f"(~{coverage:.0%} of frame) → {overall.upper()}.")
 
     return Aggregation(overall=overall, damage_score=score, coverage=round(coverage, 3),
                        counts=counts, worst_individual=worst,
