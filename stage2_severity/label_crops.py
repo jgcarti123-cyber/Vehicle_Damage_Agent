@@ -59,41 +59,39 @@ OPENAI_MODEL = "gpt-4o-mini"
 # Use DAMAGE_TYPE as a plain placeholder — avoids .format() conflicts with
 # the literal { } braces in the JSON example.
 PROMPT_TEMPLATE = """\
-You are a vehicle insurance damage assessor. Classify the severity of the damage visible in this crop.
+You are a vehicle damage assessor for an Indian insurance company. Classify the severity of the damage visible in this crop.
 
 Damage type: DAMAGE_TYPE
 
-SEVERITY DEFINITIONS — use visual evidence only, not estimated costs:
+SEVERITY LEVELS (Indian motor insurance standard):
 
-mild
-  - Superficial scratches < 10 cm with no paint depth penetration
-  - Small dents < 2 cm diameter with paint intact
-  - Minor scuffs or paint transfers
-  - No cracked or broken parts
+mild — Cosmetic damage only. Car is fully driveable and safe to use.
+  Visual indicators: small scratches, minor scuffs, paint chips or transfers,
+  small dents with paint intact, cracked mirror glass (casing still attached),
+  single-panel superficial damage. No component needs full replacement.
+  Typical claim: ₹2,000 – ₹25,000
 
-moderate
-  - Dents 2–10 cm or deep scratches exposing primer or bare metal
-  - Cracked or shattered lights/lenses (not broken off entirely)
-  - Multiple or compound scratches covering a significant panel area
-  - Panel deformation without structural impact; car fully driveable
+moderate — One or more components visibly damaged and need replacement or major repair.
+  Car may still be driveable but requires workshop attention.
+  Visual indicators: bumper cracked or detached, headlight or taillight broken/shattered,
+  fender bent or creased, door panel heavily dented or gouged exposing bare metal,
+  multiple scratches across a full panel. No chassis or structural deformation.
+  Typical claim: ₹25,000 – ₹1,50,000
 
-severe
-  - Dents > 10 cm, panel crush, or bent panel edges
-  - Broken or missing parts (mirror casing detached, bumper hanging off)
-  - Shattered windshield or major glass loss
-  - Structural deformation visible; car may not be driveable
+severe — Structural, safety-critical, or multi-system damage. Car may be unsafe to drive.
+  Visual indicators: chassis or frame visibly bent, airbag(s) deployed,
+  roof or A/B-pillar crushed, engine bay damaged from collision impact,
+  two or more panels severely crushed, windshield fully shattered.
+  Typical claim: ₹1,50,000+
 
-total_loss
-  - Multiple severe panels, frame/chassis damage, or fire damage
-  - Repair cost would clearly exceed the car's market value
-
-If uncertain between two adjacent levels, pick the more severe one.
+Assess ONLY what is directly visible in this crop. Choose the level that best matches
+the observable damage — do not guess what is hidden.
 
 Respond with valid JSON only. No other text:
 {
-  "severity": "<mild|moderate|severe|total_loss>",
+  "severity": "<mild|moderate|severe>",
   "confidence": <0.0-1.0>,
-  "reasoning": "<one sentence citing the specific visual evidence>"
+  "reasoning": "<one sentence citing the specific visible damage and why it fits the chosen level>"
 }"""
 
 CSV_FIELDS = ["crop_path", "image_stem", "damage_type", "severity",
@@ -206,7 +204,8 @@ def _label_one(client, crop_path: Path, model_name: str) -> dict:
                     f"OpenAI quota/credits exhausted: {msg}"
                 ) from e
             # Transient errors — retry with backoff.
-            if any(code in msg for code in ("503", "500", "502", "timed out", "timeout")):
+            if any(code in msg.lower() for code in
+                   ("503", "500", "502", "timed out", "timeout", "connection error")):
                 last_exc = e
                 continue
             # Per-minute rate limit — retry with backoff.

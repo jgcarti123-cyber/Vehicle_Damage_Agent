@@ -133,10 +133,12 @@ def build_model(num_classes: int = 3) -> nn.Module:
 
 class FocalLoss(nn.Module):
     """Focal loss (Lin et al. 2017). gamma=0 reduces to weighted cross-entropy."""
-    def __init__(self, weight: torch.Tensor | None = None, gamma: float = 2.0):
+    def __init__(self, weight: torch.Tensor | None = None, gamma: float = 2.0,
+                 label_smoothing: float = 0.0):
         super().__init__()
         self.gamma = gamma
-        self.ce = nn.CrossEntropyLoss(weight=weight, reduction="none")
+        self.ce = nn.CrossEntropyLoss(weight=weight, reduction="none",
+                                      label_smoothing=label_smoothing)
 
     def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         ce_loss = self.ce(inputs, targets)
@@ -222,8 +224,10 @@ def main() -> None:
                    help="Head lr during freeze phase; backbone lr = lr/10 after unfreeze")
     p.add_argument("--weight-decay",  type=float, default=1e-4)
     p.add_argument("--patience",      type=int,   default=10)
-    p.add_argument("--focal-gamma",  type=float, default=2.0,
+    p.add_argument("--focal-gamma",      type=float, default=2.0,
                    help="Focal loss gamma (0 = standard weighted cross-entropy)")
+    p.add_argument("--label-smoothing", type=float, default=0.0,
+                   help="Label smoothing factor (0.0 = off, 0.1 recommended for noisy boundaries)")
     p.add_argument("--oversample",   action="store_true",
                    help="Use WeightedRandomSampler to balance batches by class")
     p.add_argument("--workers",      type=int,   default=2)
@@ -279,8 +283,9 @@ def main() -> None:
     print(f"\nClass weights: " +
           "  ".join(f"{c}={w:.2f}" for c, w in zip(SEVERITY_CLASSES, class_weights.tolist())))
     if args.focal_gamma > 0:
-        criterion = FocalLoss(weight=class_weights, gamma=args.focal_gamma)
-        print(f"Loss: FocalLoss(gamma={args.focal_gamma})")
+        criterion = FocalLoss(weight=class_weights, gamma=args.focal_gamma,
+                              label_smoothing=args.label_smoothing)
+        print(f"Loss: FocalLoss(gamma={args.focal_gamma}, label_smoothing={args.label_smoothing})")
     else:
         criterion = nn.CrossEntropyLoss(weight=class_weights)
         print("Loss: WeightedCrossEntropyLoss")
