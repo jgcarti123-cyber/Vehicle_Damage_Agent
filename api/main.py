@@ -205,10 +205,6 @@ def routing_guide():
 @app.post("/assess", response_model=AssessmentResponse, tags=["assessment"])
 async def assess(
     file: UploadFile = File(..., description="Vehicle damage photo (JPEG / PNG / WEBP)"),
-    conf: float = Query(
-        default=0.25, ge=0.05, le=0.95,
-        description="YOLO detection confidence threshold (lower = more detections)"
-    ),
     include_annotated: bool = Query(
         default=False,
         description="Include base64-encoded annotated image in the response"
@@ -254,7 +250,6 @@ async def assess(
                 severity_model=_models["severity"],
                 device=_models["device"],
                 out_dir=Path(tmpdir) / "out",
-                detection_conf=conf,
                 annotate=include_annotated,
             )
         except Exception as e:

@@ -207,11 +207,6 @@
   </div>
 
   <div class="controls">
-    <div class="control-group">
-      <label for="confSlider">Detection threshold</label>
-      <input type="range" id="confSlider" min="0.05" max="0.95" step="0.05" value="0.25">
-      <span class="conf-value" id="confValue">0.25</span>
-    </div>
     <button id="assessBtn" disabled>Assess Damage</button>
     <span id="fileName" style="color:var(--muted);font-size:0.85rem;"></span>
   </div>
@@ -256,8 +251,6 @@ const SEV_COLORS = { mild: "#22c55e", moderate: "#f59e0b", severe: "#ef4444" };
 const uploadZone = document.getElementById("uploadZone");
 const fileInput = document.getElementById("fileInput");
 const assessBtn = document.getElementById("assessBtn");
-const confSlider = document.getElementById("confSlider");
-const confValue = document.getElementById("confValue");
 const fileNameEl = document.getElementById("fileName");
 const spinner = document.getElementById("spinner");
 const results = document.getElementById("results");
@@ -274,7 +267,6 @@ uploadZone.addEventListener("drop", (e) => {
   if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
 });
 fileInput.addEventListener("change", () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
-confSlider.addEventListener("input", () => confValue.textContent = parseFloat(confSlider.value).toFixed(2));
 
 function handleFile(file) {
   selectedFile = file;
@@ -294,10 +286,9 @@ assessBtn.addEventListener("click", async () => {
 
   const form = new FormData();
   form.append("file", selectedFile);
-  const conf = confSlider.value;
 
   try {
-    const res = await fetch(`/assess?conf=${conf}&include_annotated=true`, {
+    const res = await fetch(`/assess?include_annotated=true`, {
       method: "POST",
       body: form,
     });

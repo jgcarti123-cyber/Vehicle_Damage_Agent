@@ -85,8 +85,13 @@ ROUTING_ORDER = ["auto_classify", "suggest_human_confirm", "human_review"]
 SEVERITY_POINTS = {"mild": 1, "moderate": 3, "severe": 8}
 
 # Total damage score thresholds (sum of per-region points).
-SCORE_SEVERE   = 12   # e.g. 4 moderate components, or 1 severe + extras
+SCORE_SEVERE   = 9    # e.g. 3 moderate components, or 1 severe + extras
 SCORE_MODERATE = 5    # e.g. 2 moderate, or ~5 mild scratches adding up
+
+# Fixed detection confidence — low so ALL damage is caught consistently. Severity
+# must not depend on a user-tunable threshold (a high threshold drops low-confidence
+# damages, shrinks the score, and makes a totalled car read as moderate).
+DETECTION_CONF = 0.10
 
 # Coverage can bump mild -> moderate only (never severe — see note above).
 COVERAGE_MODERATE = 0.35
@@ -366,7 +371,7 @@ def run_image(
     severity_model,
     device: torch.device,
     out_dir: Path,
-    detection_conf: float = 0.25,
+    detection_conf: float = DETECTION_CONF,
     annotate: bool = True,
     stage1_name: str = "yolo11s-v2-5class",
     stage2_name: str = "efficientnet-b0-v6",
@@ -438,7 +443,8 @@ def main():
     p.add_argument("--stage1-weights", type=Path, default=DEFAULT_STAGE1)
     p.add_argument("--stage2-weights", type=Path, default=DEFAULT_STAGE2)
     p.add_argument("--out",      type=Path, default=Path("outputs/pipeline"))
-    p.add_argument("--conf",     type=float, default=0.25, help="YOLO detection threshold")
+    p.add_argument("--conf",     type=float, default=DETECTION_CONF,
+                   help="YOLO detection threshold (default low to catch all damage)")
     p.add_argument("--device",   type=str,   default=None)
     p.add_argument("--json",     action="store_true", help="Print JSON output")
     p.add_argument("--no-annotate", action="store_true")
