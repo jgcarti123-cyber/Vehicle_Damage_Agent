@@ -136,7 +136,8 @@ row-column of the frame, plus the % of the frame each box covers):
 {region_list}
 
 ─────────────────────────────────────────────────────────────────────
-PARTS PRICE REFERENCE — OEM parts, Indian market 2024, incl. 18% GST
+ALL-IN WORKSHOP COST REFERENCE — part + painting + labour, 2024, incl. 18% GST
+(These are realistic total workshop costs, NOT just parts prices.)
 ─────────────────────────────────────────────────────────────────────
 Segment guide:
   Budget       → Alto K10, Kwid, S-Presso, WagonR (base), i10 Nios (base)
@@ -146,61 +147,65 @@ Segment guide:
   Premium SUV  → XUV700, Fortuner, Innova Crysta, Thar 4×4, Safari, Endeavour
   Luxury       → Jeep Compass, BMW 3/5, Mercedes C/E, Audi A4/Q5+
 
-Part (OEM replace cost)  | Budget   | Compact  | Cmpct SUV| Mid SUV  | Prem SUV | Luxury
--------------------------|----------|----------|----------|----------|----------|----------
-Front bumper             | 3K–6K    | 5K–12K   | 8K–18K   | 12K–25K  | 20K–45K  | 40K–90K
-Rear bumper              | 2.5K–5K  | 4K–10K   | 7K–15K   | 10K–22K  | 18K–40K  | 35K–80K
-Bonnet / hood            | 8K–14K   | 12K–22K  | 18K–30K  | 25K–45K  | 45K–80K  | 80K–1.5L
-Front door (per side)    | 8K–14K   | 12K–22K  | 16K–28K  | 22K–40K  | 40K–75K  | 80K–1.5L
-Rear door (per side)     | 7K–12K   | 10K–18K  | 14K–25K  | 20K–35K  | 35K–65K  | 70K–1.2L
-Front fender (per side)  | 4K–8K    | 6K–12K   | 8K–16K   | 12K–22K  | 20K–40K  | 40K–80K
-Headlight assembly       | 2.5K–5K  | 4K–10K   | 8K–18K   | 15K–30K  | 25K–55K  | 50K–1.2L
-Taillight assembly       | 1.5K–4K  | 3K–8K    | 5K–14K   | 10K–22K  | 18K–40K  | 35K–80K
-Windshield (front)       | 5K–9K    | 8K–14K   | 10K–18K  | 14K–25K  | 20K–40K  | 40K–90K
-Windshield (rear)        | 4K–8K    | 6K–12K   | 8K–16K   | 12K–22K  | 18K–35K  | 35K–80K
-Side mirror (per side)   | 1K–2.5K  | 1.5K–4K  | 3K–8K    | 5K–12K   | 8K–20K   | 18K–45K
-Alloy wheel (each)       | 3K–5K    | 4K–8K    | 6K–12K   | 8K–18K   | 15K–30K  | 30K–70K
-Radiator                 | 4K–8K    | 6K–12K   | 8K–18K   | 12K–25K  | 22K–45K  | 45K–1L
-A/C condenser            | 5K–10K   | 8K–16K   | 12K–22K  | 18K–32K  | 28K–55K  | 55K–1.2L
-
-LABOUR RATES (workshop, not dealership):
-  Tier-1 (Mumbai, Delhi, Bengaluru, Hyderabad, Chennai, Pune, Kolkata): ₹600–1,100/hr
-  Tier-2 (Ahmedabad, Jaipur, Lucknow, Chandigarh, Indore, Kochi, Nagpur, Coimbatore): ₹400–750/hr
-  Tier-3 / small towns: ₹250–500/hr
-
-PAINT / REFINISHING (materials + labour, per panel):
-  Tier-1: ₹3,500–6,000 | Tier-2: ₹2,500–4,500 | Tier-3: ₹1,800–3,500
+All-in cost (part+paint+labour)   | Budget   | Compact  | Cmpct SUV| Mid SUV  | Prem SUV | Luxury
+----------------------------------|----------|----------|----------|----------|----------|----------
+Front bumper                      | 6K–14K   | 10K–26K  | 15K–34K  | 22K–46K  | 40K–88K  | 80K–1.8L
+Rear bumper                       | 5K–12K   | 8K–22K   | 12K–30K  | 18K–40K  | 34K–75K  | 70K–1.5L
+Bonnet / hood                     | 12K–24K  | 18K–40K  | 26K–55K  | 36K–72K  | 68K–1.3L | 1.4L–2.5L
+Front door (per side)             | 13K–24K  | 18K–36K  | 24K–48K  | 34K–65K  | 65K–1.2L | 1.3L–2.2L
+Rear door (per side)              | 11K–20K  | 15K–30K  | 20K–42K  | 30K–56K  | 56K–1L   | 1.1L–2L
+Front fender (per side)           | 7K–14K   | 10K–22K  | 13K–28K  | 20K–38K  | 34K–70K  | 70K–1.4L
+Headlight assembly (each side)    | 4K–10K   | 7K–20K   | 12K–30K  | 20K–50K  | 38K–85K  | 80K–2L
+Taillight assembly (each side)    | 3K–7K    | 5K–14K   | 8K–22K   | 14K–36K  | 28K–65K  | 60K–1.3L
+Windshield (front) — supply+fit   | 6K–12K   | 8K–20K   | 11K–26K  | 16K–34K  | 26K–60K  | 60K–1.3L
+Windshield (rear) — supply+fit    | 5K–10K   | 7K–16K   | 9K–22K   | 14K–28K  | 20K–46K  | 46K–1.1L
+Side mirror (per side)            | 2K–5K    | 3K–8K    | 5K–14K   | 7K–20K   | 12K–34K  | 30K–70K
+Alloy wheel (each)                | 4K–8K    | 6K–14K   | 8K–20K   | 12K–30K  | 22K–50K  | 50K–1.1L
+Radiator (supply+install)         | 6K–14K   | 9K–22K   | 13K–28K  | 18K–40K  | 36K–72K  | 72K–1.6L
+A/C condenser (supply+install)    | 7K–16K   | 12K–28K  | 17K–38K  | 26K–55K  | 44K–88K  | 88K–2L
+Grille                            | 2K–5K    | 4K–12K   | 5K–14K   | 7K–18K   | 12K–30K  | 25K–60K
+Front structure / crash frame     | 8K–20K   | 15K–40K  | 22K–55K  | 28K–70K  | 50K–1.2L | 1.2L–3L
+Chassis / frame straightening     | 8K–20K   | 15K–38K  | 20K–55K  | 25K–70K  | 40K–1.1L | 1L–3L
+Paint & finishing (full repaint   | 10K–20K  | 20K–45K  | 25K–60K  | 30K–75K  | 50K–1.2L | 1L–3L
+  of damaged area, 3+ panels)     |          |          |          |          |          |
+Airbag replacement (per bag)      | 8K–22K   | 15K–42K  | 20K–58K  | 28K–80K  | 55K–1.6L | 1.5L–5L
+Engine diagnostic + minor repair  | 3K–8K    | 5K–15K   | 7K–20K   | 8K–25K   | 12K–35K  | 20K–60K
+Major engine / gearbox damage     | 30K–80K  | 50K–1.5L | 75K–2L   | 1L–3L    | 1.5L–5L  | 3L–15L
 
 REPAIR vs REPLACE guide:
-  Scratch only (no dent)        → refinishing only
-  Small dent < 5 cm, no cracks  → PDR repair ₹1,500–5,000 flat
+  Scratch only (no dent)        → refinishing only (₹2K–6K per panel)
+  Small dent < 5 cm, no cracks  → PDR repair (₹2K–6K flat)
   Dent with paint damage         → panel repair + refinish
-  Crack / sharp deformation      → replacement
+  Crack / sharp deformation      → replacement (use table above)
   Structural deformation         → replacement + frame check
-  Total loss                     → salvage value = 5–15% of IDV
+  Total loss                     → salvage = 5–15% of IDV; estimate full rebuild cost
 {unknown_vehicle_note}
 ─────────────────────────────────────────────────────────────────────
 
 TASK: Study the photo together with the bounding boxes. Itemise EVERY component
 that is visibly damaged — use the boxes as a guide, but trust your own reading of
-the photo over the box count (the detector often merges or misses parts).
+the photo (the detector often merges or misses parts).
 
 CRITICAL — do NOT under-itemise:
-- A bounding box labelled "dent" on a crushed area usually means the WHOLE panel
-  plus the parts behind it are destroyed. One box over the front end is NOT "one
-  bumper".
-- If the front end is crushed, itemise each affected part separately: front bumper,
-  bonnet/hood, grille, BOTH headlights, radiator, A/C condenser, BOTH front fenders,
-  and add a "Front structure / crash frame" line if metal is bent or the cabin is
-  pushed in. Do the same for rear-end or side impacts.
-- When the AI surveyor verdict above says TOTAL LOSS or severe structural damage,
-  the total MUST reflect a major rebuild (typically ₹1.5L+ for a compact car, often
-  exceeding the car's value). A few thousand rupees is wrong for a total loss.
-- Merge boxes only when they clearly sit on the SAME single component.
+- One box over a crushed front end is NOT "one bumper". A crushed front must produce
+  SEPARATE line items for: front bumper, bonnet/hood, grille, BOTH headlights,
+  radiator, A/C condenser, BOTH front fenders, front structure/crash frame, and
+  paint & finishing for the affected area. Do the same for rear or side impacts.
+- Always check for windshield damage in front/rear collisions — add it if cracked or
+  shattered even if no box covers it.
+- TOTAL LOSS mandatory additions — whenever is_total_loss is true OR the surveyor
+  verdict flags severe structural damage, you MUST add ALL of these lines:
+    (a) Paint & finishing (full respray of damaged panels)
+    (b) Airbag replacement for any deployed bags visible or implied by the crash energy
+    (c) Engine diagnostic + potential engine/gearbox damage
+    (d) Chassis / frame straightening
+  A total-loss compact car MINIMUM is ₹2,50,000. A total output of ₹80K–1L is
+  wrong for a write-off — it means you missed airbags, engine, and chassis lines.
+- Merge boxes only when they clearly sit on the SAME single physical component.
 
-Choose repair/replace/refinish per item and price using the table above. If the
-vehicle segment is known use that column; otherwise default to Compact SUV.
-Set is_total_loss=true if the surveyor flagged it or the damage is a clear write-off.
+Use the all-in cost table for each item. If vehicle segment is known use that column;
+otherwise default to Compact SUV.
+Set is_total_loss=true if the surveyor flagged it or damage is a clear write-off.
 
 Respond with valid JSON only — no other text:
 {{
@@ -428,7 +433,7 @@ def estimate_repair_cost(
 # Fixed detection confidence — low so ALL damage is caught consistently. Severity
 # must not depend on a user-tunable threshold (a high threshold drops low-confidence
 # damages, shrinks the score, and makes a totalled car read as moderate).
-DETECTION_CONF = 0.15
+DETECTION_CONF = 0.10
 
 
 # ---------------------------------------------------------------------------
