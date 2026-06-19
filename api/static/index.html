@@ -162,6 +162,8 @@
     line-height: 1.45;
   }
   .reason.escalated { border-left-color: var(--severe); }
+  .reason-block { margin-bottom: 10px; }
+  .reason-block:last-child { margin-bottom: 0; }
   .reason .reason-tag {
     display: block;
     font-size: 0.72rem;
@@ -324,18 +326,33 @@ function render(data) {
     `<span class="badge route-${data.overall_routing}">${routeLabel(data.overall_routing)}</span>`;
 
   const reasonBox = document.getElementById("reasonBox");
+  let html = "";
+  let escalated = false;
+
+  if (data.vlm_assessment) {
+    const v = data.vlm_assessment;
+    const tl = v.is_total_loss ? " · ⚠️ TOTAL-LOSS" : "";
+    const src = data.severity_source === "vlm" ? " (drove the verdict)" : "";
+    html += `<div class="reason-block"><span class="reason-tag">🧠 Whole-image AI assessment${src}</span>`
+         +  `<strong>${v.severity.toUpperCase()}</strong> · ${(v.confidence*100).toFixed(0)}% confident${tl}<br>${v.reasoning}</div>`;
+  }
   if (data.aggregation) {
     const a = data.aggregation;
-    reasonBox.className = "reason" + (a.escalated ? " escalated" : "");
-    const tag = a.escalated ? "⚠️ Severity escalated (vehicle-level)" : "Vehicle-level assessment";
-    reasonBox.innerHTML = `<span class="reason-tag">${tag}</span>${a.reason}`;
+    escalated = a.escalated;
+    html += `<div class="reason-block"><span class="reason-tag">🔍 Per-damage breakdown</span>${a.reason}</div>`;
+  }
+
+  if (html) {
+    reasonBox.className = "reason" + ((escalated || (data.vlm_assessment && data.vlm_assessment.is_total_loss)) ? " escalated" : "");
+    reasonBox.innerHTML = html;
     reasonBox.style.display = "block";
   } else {
     reasonBox.style.display = "none";
   }
 
+  const vlmMs = data.vlm_time_ms ? ` · AI ${data.vlm_time_ms.toFixed(0)}ms` : "";
   document.getElementById("timing").textContent =
-    `Detection ${data.detection_time_ms.toFixed(0)}ms · Severity ${data.severity_time_ms.toFixed(0)}ms · Total ${data.total_time_ms.toFixed(0)}ms · ${data.stage1_model} + ${data.stage2_model}`;
+    `Detection ${data.detection_time_ms.toFixed(0)}ms · Severity ${data.severity_time_ms.toFixed(0)}ms${vlmMs} · Total ${data.total_time_ms.toFixed(0)}ms · ${data.stage1_model} + ${data.stage2_model}`;
 
   const regionsEl = document.getElementById("regions");
   regionsEl.innerHTML = "";

@@ -94,13 +94,106 @@ SCORE_MODERATE = 5    # e.g. 2 moderate, or ~5 mild scratches adding up
 # severe 34%": the 34% is the real signal, and counting detections misses it.
 SEVERE_PROB_TRIGGER = 0.30
 
+# Whole-image VLM severity — sees the entire vehicle (not isolated crops), so it
+# judges total-loss the way a human assessor does. Best-effort: falls back to the
+# crop heuristic if no API key / the call fails.
+VLM_SEVERITY_MODEL = "gpt-4o-mini"
+VLM_SEVERITY_PROMPT = """\
+You are a senior motor-insurance assessor. Assess the OVERALL damage severity of
+the vehicle in this photo at the VEHICLE level — judge the whole car, not one spot.
+
+Severity levels (Indian motor insurance):
+- mild:     cosmetic only, fully driveable (scratches, scuffs, small dents).
+- moderate: one or more components need replacement/major repair, likely still
+            driveable (bumper, headlight/taillight, fender, door panel).
+- severe:   structural or safety-critical damage, possible total-loss — the car
+            is unsafe or impossible to drive.
+
+Pay special attention to TOTAL-LOSS indicators: crushed/exposed cabin, deployed
+airbags, bent frame/chassis, roof or pillar crush, multiple severely crushed
+panels, displaced wheels/suspension, fire damage.
+
+Respond with valid JSON only, no other text:
+{
+  "severity": "<mild|moderate|severe>",
+  "is_total_loss": <true|false>,
+  "confidence": <0.0-1.0>,
+  "reasoning": "<one sentence citing the specific visible evidence>"
+}"""
+
+_openai_client = None
+_openai_checked = False
+
+
+def _get_openai_client():
+    """Lazily build a cached OpenAI client, or None if unavailable."""
+    global _openai_client, _openai_checked
+    if _openai_checked:
+        return _openai_client
+    _openai_checked = True
+    try:
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key:
+            print("[vlm] OPENAI_API_KEY not set — whole-image severity disabled.")
+            return None
+        from openai import OpenAI
+        _openai_client = OpenAI(api_key=key, timeout=20.0)
+    except Exception as e:
+        print(f"[vlm] OpenAI client unavailable: {e}")
+        _openai_client = None
+    return _openai_client
+
+
+def assess_whole_image_vlm(image_path: Path) -> VLMSeverity | None:
+    """Send the full image to the VLM for a vehicle-level severity call.
+
+    Returns None on any failure (no key, network error, bad response) so the
+    caller can fall back to the crop-based heuristic."""
+    client = _get_openai_client()
+    if client is None:
+        return None
+    try:
+        import base64
+        b64 = base64.b64encode(Path(image_path).read_bytes()).decode("utf-8")
+        resp = client.chat.completions.create(
+            model=VLM_SEVERITY_MODEL,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image_url",
+                     "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "low"}},
+                    {"type": "text", "text": VLM_SEVERITY_PROMPT},
+                ],
+            }],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            max_tokens=200,
+        )
+        data = json.loads(resp.choices[0].message.content)
+        sev = data.get("severity")
+        if sev not in SEVERITY_ORDER:
+            return None
+        is_total = bool(data.get("is_total_loss", False))
+        if is_total:
+            sev = "severe"  # a write-off is always severe
+        return VLMSeverity(
+            severity=sev,
+            is_total_loss=is_total,
+            confidence=float(data.get("confidence", 0.0)),
+            reasoning=str(data.get("reasoning", "")),
+            model=VLM_SEVERITY_MODEL,
+        )
+    except Exception as e:
+        print(f"[vlm] whole-image assessment failed: {e}")
+        return None
+
 # Fixed detection confidence — low so ALL damage is caught consistently. Severity
 # must not depend on a user-tunable threshold (a high threshold drops low-confidence
 # damages, shrinks the score, and makes a totalled car read as moderate).
 DETECTION_CONF = 0.10
-
-# Coverage can bump mild -> moderate only (never severe — see note above).
-COVERAGE_MODERATE = 0.35
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +216,15 @@ class RegionResult(BaseModel):
     severity: SeverityAssessment | None = None
 
 
+class VLMSeverity(BaseModel):
+    """Whole-image severity from a vision LLM that sees the entire vehicle."""
+    severity: str = Field(..., description="mild | moderate | severe")
+    is_total_loss: bool = Field(..., description="True if the car appears to be a write-off")
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    reasoning: str
+    model: str
+
+
 class Aggregation(BaseModel):
     """Image-level severity reasoning — how per-crop results roll up to the car."""
     overall: str = Field(..., description="Vehicle-level severity: mild | moderate | severe | unknown")
@@ -140,11 +242,16 @@ class PipelineResult(BaseModel):
     image_height: int
     num_damages: int
     regions: list[RegionResult]
-    overall_severity: str = Field(..., description="Vehicle-level severity after aggregation")
+    overall_severity: str = Field(..., description="Vehicle-level severity (VLM-authoritative when available)")
     overall_routing: str  = Field(..., description="Most cautious routing across all regions")
+    severity_source: str  = Field(..., description="vlm | crop_heuristic — what drove overall_severity")
     aggregation: Aggregation
+    vlm_assessment: VLMSeverity | None = Field(
+        default=None, description="Whole-image VLM severity (None if VLM unavailable)"
+    )
     detection_time_ms: float
     severity_time_ms: float
+    vlm_time_ms: float = 0.0
     total_time_ms: float
     stage1_model: str
     stage2_model: str
@@ -392,6 +499,7 @@ def run_image(
     out_dir: Path,
     detection_conf: float = DETECTION_CONF,
     annotate: bool = True,
+    use_vlm: bool = True,
     stage1_name: str = "yolo11s-v2-5class",
     stage2_name: str = "efficientnet-b0-v6",
 ) -> PipelineResult:
@@ -401,14 +509,32 @@ def run_image(
     regions, sev_ms   = _classify_regions(detection, severity_model, device)
 
     routings = [r.severity.routing for r in regions if r.severity]
+    aggregation = aggregate_severity(regions, detection.image_width, detection.image_height)
 
-    aggregation     = aggregate_severity(regions, detection.image_width, detection.image_height)
-    overall_sev     = aggregation.overall
+    # Whole-image VLM call (best-effort). It sees the entire car, so it is the
+    # authoritative vehicle-level judge — especially for total-loss.
+    vlm_assessment = None
+    vlm_ms = 0.0
+    if use_vlm:
+        t_vlm = time.perf_counter()
+        vlm_assessment = assess_whole_image_vlm(image_path)
+        vlm_ms = (time.perf_counter() - t_vlm) * 1000.0
+
+    # Reconcile: take the WORST of {VLM, crop-heuristic}. Never under-call a
+    # total loss — over-calling only routes to a human, which is the safe direction.
+    if vlm_assessment is not None:
+        overall_sev = worst_severity([aggregation.overall, vlm_assessment.severity])
+        severity_source = "vlm" if SEVERITY_ORDER.get(vlm_assessment.severity, -1) >= \
+            SEVERITY_ORDER.get(aggregation.overall, -1) else "crop_heuristic"
+    else:
+        overall_sev = aggregation.overall
+        severity_source = "crop_heuristic"
+
     overall_routing = worst_routing(routings) if routings else "human_review"
-
-    # A vehicle-level escalation means no single crop was confidently severe —
-    # high-stakes total-loss calls must always be reviewed by a human.
-    if aggregation.escalated:
+    # High-stakes calls always get a human: a severe/total-loss result, or any
+    # case where the vehicle-level severity exceeded the worst single crop.
+    if overall_sev == "severe" or aggregation.escalated or (
+        vlm_assessment is not None and vlm_assessment.is_total_loss):
         overall_routing = "human_review"
 
     if annotate:
@@ -424,9 +550,12 @@ def run_image(
         regions=regions,
         overall_severity=overall_sev,
         overall_routing=overall_routing,
+        severity_source=severity_source,
         aggregation=aggregation,
+        vlm_assessment=vlm_assessment,
         detection_time_ms=round(det_ms, 1),
         severity_time_ms=round(sev_ms, 1),
+        vlm_time_ms=round(vlm_ms, 1),
         total_time_ms=round(total_ms, 1),
         stage1_model=stage1_name,
         stage2_model=stage2_name,
@@ -440,10 +569,16 @@ def run_image(
 def _print_result(result: PipelineResult) -> None:
     print(f"\nImage    : {Path(result.image_path).name}")
     print(f"Damages  : {result.num_damages}")
-    print(f"Overall  : {result.overall_severity.upper()}  [{result.overall_routing}]")
-    print(f"Reason   : {result.aggregation.reason}")
+    print(f"Overall  : {result.overall_severity.upper()}  [{result.overall_routing}]  "
+          f"(source: {result.severity_source})")
+    if result.vlm_assessment:
+        v = result.vlm_assessment
+        tl = "  TOTAL-LOSS" if v.is_total_loss else ""
+        print(f"VLM      : {v.severity.upper()} {v.confidence:.0%}{tl} — {v.reasoning}")
+    print(f"Crops    : {result.aggregation.reason}")
     print(f"Timing   : detection={result.detection_time_ms:.0f}ms  "
           f"severity={result.severity_time_ms:.0f}ms  "
+          f"vlm={result.vlm_time_ms:.0f}ms  "
           f"total={result.total_time_ms:.0f}ms")
     print()
     for i, r in enumerate(result.regions, 1):
@@ -467,6 +602,8 @@ def main():
     p.add_argument("--device",   type=str,   default=None)
     p.add_argument("--json",     action="store_true", help="Print JSON output")
     p.add_argument("--no-annotate", action="store_true")
+    p.add_argument("--no-vlm", action="store_true",
+                   help="Skip the whole-image VLM call (offline / crop-heuristic only)")
     args = p.parse_args()
 
     # Device
@@ -504,6 +641,7 @@ def main():
             out_dir=args.out,
             detection_conf=args.conf,
             annotate=not args.no_annotate,
+            use_vlm=not args.no_vlm,
         )
 
         if args.json:

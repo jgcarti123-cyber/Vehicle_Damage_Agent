@@ -33,7 +33,9 @@ _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "stage1_detection"))
 
-from pipeline import Aggregation, PipelineResult, RegionResult, SeverityAssessment, run_image
+from pipeline import (
+    Aggregation, PipelineResult, RegionResult, SeverityAssessment, VLMSeverity, run_image,
+)
 from stage2_severity.infer import load_model as _load_severity
 
 # ---------------------------------------------------------------------------
@@ -56,10 +58,13 @@ class AssessmentResponse(BaseModel):
     num_damages: int
     overall_severity: str = Field(..., description="mild | moderate | severe | unknown")
     overall_routing: str  = Field(..., description="auto_classify | suggest_human_confirm | human_review")
+    severity_source: str  = Field(..., description="vlm | crop_heuristic")
     aggregation: Aggregation
+    vlm_assessment: VLMSeverity | None = None
     regions: list[RegionResult]
     detection_time_ms: float
     severity_time_ms: float
+    vlm_time_ms: float
     total_time_ms: float
     stage1_model: str
     stage2_model: str
@@ -80,10 +85,13 @@ class AssessmentResponse(BaseModel):
             num_damages=result.num_damages,
             overall_severity=result.overall_severity,
             overall_routing=result.overall_routing,
+            severity_source=result.severity_source,
             aggregation=result.aggregation,
+            vlm_assessment=result.vlm_assessment,
             regions=result.regions,
             detection_time_ms=result.detection_time_ms,
             severity_time_ms=result.severity_time_ms,
+            vlm_time_ms=result.vlm_time_ms,
             total_time_ms=result.total_time_ms,
             stage1_model=result.stage1_model,
             stage2_model=result.stage2_model,
