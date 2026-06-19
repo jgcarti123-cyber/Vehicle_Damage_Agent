@@ -433,7 +433,7 @@ def estimate_repair_cost(
 # Fixed detection confidence — low so ALL damage is caught consistently. Severity
 # must not depend on a user-tunable threshold (a high threshold drops low-confidence
 # damages, shrinks the score, and makes a totalled car read as moderate).
-DETECTION_CONF = 0.10
+DETECTION_CONF = 0.15
 
 
 # ---------------------------------------------------------------------------
