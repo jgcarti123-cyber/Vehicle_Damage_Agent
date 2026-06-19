@@ -36,6 +36,7 @@ google-genai>=1.0           # kept for optional fallback
 
 # --- Config / utilities ---
 python-dotenv>=1.0          # load .env (paths + secrets)
+python-multipart>=0.0.9     # FastAPI file upload support
 
 # --- Testing ---
 pytest>=8.0
