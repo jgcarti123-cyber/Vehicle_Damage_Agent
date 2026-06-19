@@ -88,6 +88,12 @@ SEVERITY_POINTS = {"mild": 1, "moderate": 3, "severe": 8}
 SCORE_SEVERE   = 9    # e.g. 3 moderate components, or 1 severe + extras
 SCORE_MODERATE = 5    # e.g. 2 moderate, or ~5 mild scratches adding up
 
+# Soft-severe trigger: if the per-crop model puts at least this much probability on
+# "severe" for ANY region — even when "moderate" is the argmax — escalate the whole
+# vehicle to severe. A crushed total-loss panel often reads as "moderate 57% /
+# severe 34%": the 34% is the real signal, and counting detections misses it.
+SEVERE_PROB_TRIGGER = 0.30
+
 # Fixed detection confidence — low so ALL damage is caught consistently. Severity
 # must not depend on a user-tunable threshold (a high threshold drops low-confidence
 # damages, shrinks the score, and makes a totalled car read as moderate).
@@ -203,9 +209,17 @@ def aggregate_severity(regions: list["RegionResult"], image_w: int, image_h: int
     coverage = _union_coverage(scored, image_w, image_h)
     worst  = worst_severity(sevs)
 
-    # Severity is driven purely by accumulated damage score + per-crop severity.
-    # Coverage is reported but never escalates (framing-dependent, see note above).
-    if counts.get("severe", 0) >= 1 or score >= SCORE_SEVERE:
+    # Soft-severe: the highest "severe" probability the model assigned to any crop.
+    # This catches total-loss panels the per-crop model hedges on (moderate argmax
+    # but heavy severe mass) without depending on how many boxes the detector found.
+    max_severe_prob = max(
+        (r.severity.probabilities.get("severe", 0.0) for r in scored), default=0.0
+    )
+    soft_severe = max_severe_prob >= SEVERE_PROB_TRIGGER
+
+    # Severity is driven by per-crop severity, soft-severe probability, and the
+    # accumulated damage score. Coverage is reported but never escalates.
+    if counts.get("severe", 0) >= 1 or soft_severe or score >= SCORE_SEVERE:
         overall = "severe"
     elif counts.get("moderate", 0) >= 1 or score >= SCORE_MODERATE:
         overall = "moderate"
@@ -223,13 +237,18 @@ def aggregate_severity(regions: list["RegionResult"], image_w: int, image_h: int
     if counts.get("mild", 0):
         parts.append(f"{counts['mild']} mild region(s)")
     detail = ", ".join(parts)
-    if escalated:
-        reason = (f"{len(scored)} damages ({detail}); damage score {score} "
-                  f"(~{coverage:.0%} of frame) → escalated to {overall.upper()} "
-                  f"(worst single crop was {worst}).")
+    # Note the dominant driver of the result.
+    if soft_severe and counts.get("severe", 0) == 0:
+        driver = f"a region reads {max_severe_prob:.0%} likely severe"
+    elif score >= SCORE_SEVERE and counts.get("severe", 0) == 0:
+        driver = f"damage score {score} across components"
     else:
-        reason = (f"{len(scored)} damages ({detail}); damage score {score} "
-                  f"(~{coverage:.0%} of frame) → {overall.upper()}.")
+        driver = f"damage score {score}"
+    if escalated:
+        reason = (f"{len(scored)} damages ({detail}); {driver} "
+                  f"→ escalated to {overall.upper()} (worst single crop was {worst}).")
+    else:
+        reason = (f"{len(scored)} damages ({detail}); {driver} → {overall.upper()}.")
 
     return Aggregation(overall=overall, damage_score=score, coverage=round(coverage, 3),
                        counts=counts, worst_individual=worst,
