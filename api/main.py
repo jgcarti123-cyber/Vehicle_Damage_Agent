@@ -25,7 +25,7 @@ from typing import Optional
 
 import torch
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 # Ensure project root is importable.
@@ -44,6 +44,7 @@ STAGE1_WEIGHTS = _ROOT / "runs/detect/vehicle-damage-detection/yolo11s-v2-5class
 STAGE2_WEIGHTS = _ROOT / "runs/severity/efficientnet-b0-v6/weights/best.pt"
 ALLOWED_TYPES  = {"image/jpeg", "image/png", "image/webp", "image/bmp"}
 MAX_FILE_MB    = 20
+STATIC_DIR     = Path(__file__).parent / "static"
 
 # ---------------------------------------------------------------------------
 # Response schemas
@@ -139,6 +140,19 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+# ---------------------------------------------------------------------------
+# Frontend
+# ---------------------------------------------------------------------------
+
+@app.get("/", include_in_schema=False)
+def frontend():
+    """Serve the single-page test frontend."""
+    index = STATIC_DIR / "index.html"
+    if not index.exists():
+        raise HTTPException(status_code=404, detail="Frontend not found.")
+    return FileResponse(index)
 
 
 # ---------------------------------------------------------------------------
