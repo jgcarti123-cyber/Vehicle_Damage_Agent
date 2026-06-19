@@ -98,6 +98,7 @@ SEVERE_PROB_TRIGGER = 0.30
 # judges total-loss the way a human assessor does. Best-effort: falls back to the
 # crop heuristic if no API key / the call fails.
 VLM_SEVERITY_MODEL = "gpt-4o-mini"
+VLM_COST_MODEL     = "gpt-4o-mini"
 VLM_SEVERITY_PROMPT = """\
 You are a senior motor-insurance assessor. Assess the OVERALL damage severity of
 the vehicle in this photo at the VEHICLE level — judge the whole car, not one spot.
@@ -120,6 +121,104 @@ Respond with valid JSON only, no other text:
   "confidence": <0.0-1.0>,
   "reasoning": "<one sentence citing the specific visible evidence>"
 }"""
+
+VLM_COST_PROMPT_TEMPLATE = """\
+You are an experienced Indian motor insurance surveyor and workshop cost estimator.
+
+VEHICLE: {vehicle_info}
+REPAIR LOCATION: {location_info}
+
+AI SURVEYOR VERDICT (already assessed at the whole-vehicle level):
+{surveyor_verdict}
+
+DETECTED DAMAGE REGIONS (computer-vision bounding boxes — location is given as
+row-column of the frame, plus the % of the frame each box covers):
+{region_list}
+
+─────────────────────────────────────────────────────────────────────
+PARTS PRICE REFERENCE — OEM parts, Indian market 2024, incl. 18% GST
+─────────────────────────────────────────────────────────────────────
+Segment guide:
+  Budget       → Alto K10, Kwid, S-Presso, WagonR (base), i10 Nios (base)
+  Compact      → Swift, Baleno, i20, Altroz, Tiago, Polo, Punch (base)
+  Compact SUV  → Venue, Sonet, Nexon, Brezza, Magnite, Amaze, Dzire, City
+  Mid SUV      → Creta, Seltos, XUV300, Kushaq, Taigun, Harrier (base)
+  Premium SUV  → XUV700, Fortuner, Innova Crysta, Thar 4×4, Safari, Endeavour
+  Luxury       → Jeep Compass, BMW 3/5, Mercedes C/E, Audi A4/Q5+
+
+Part (OEM replace cost)  | Budget   | Compact  | Cmpct SUV| Mid SUV  | Prem SUV | Luxury
+-------------------------|----------|----------|----------|----------|----------|----------
+Front bumper             | 3K–6K    | 5K–12K   | 8K–18K   | 12K–25K  | 20K–45K  | 40K–90K
+Rear bumper              | 2.5K–5K  | 4K–10K   | 7K–15K   | 10K–22K  | 18K–40K  | 35K–80K
+Bonnet / hood            | 8K–14K   | 12K–22K  | 18K–30K  | 25K–45K  | 45K–80K  | 80K–1.5L
+Front door (per side)    | 8K–14K   | 12K–22K  | 16K–28K  | 22K–40K  | 40K–75K  | 80K–1.5L
+Rear door (per side)     | 7K–12K   | 10K–18K  | 14K–25K  | 20K–35K  | 35K–65K  | 70K–1.2L
+Front fender (per side)  | 4K–8K    | 6K–12K   | 8K–16K   | 12K–22K  | 20K–40K  | 40K–80K
+Headlight assembly       | 2.5K–5K  | 4K–10K   | 8K–18K   | 15K–30K  | 25K–55K  | 50K–1.2L
+Taillight assembly       | 1.5K–4K  | 3K–8K    | 5K–14K   | 10K–22K  | 18K–40K  | 35K–80K
+Windshield (front)       | 5K–9K    | 8K–14K   | 10K–18K  | 14K–25K  | 20K–40K  | 40K–90K
+Windshield (rear)        | 4K–8K    | 6K–12K   | 8K–16K   | 12K–22K  | 18K–35K  | 35K–80K
+Side mirror (per side)   | 1K–2.5K  | 1.5K–4K  | 3K–8K    | 5K–12K   | 8K–20K   | 18K–45K
+Alloy wheel (each)       | 3K–5K    | 4K–8K    | 6K–12K   | 8K–18K   | 15K–30K  | 30K–70K
+Radiator                 | 4K–8K    | 6K–12K   | 8K–18K   | 12K–25K  | 22K–45K  | 45K–1L
+A/C condenser            | 5K–10K   | 8K–16K   | 12K–22K  | 18K–32K  | 28K–55K  | 55K–1.2L
+
+LABOUR RATES (workshop, not dealership):
+  Tier-1 (Mumbai, Delhi, Bengaluru, Hyderabad, Chennai, Pune, Kolkata): ₹600–1,100/hr
+  Tier-2 (Ahmedabad, Jaipur, Lucknow, Chandigarh, Indore, Kochi, Nagpur, Coimbatore): ₹400–750/hr
+  Tier-3 / small towns: ₹250–500/hr
+
+PAINT / REFINISHING (materials + labour, per panel):
+  Tier-1: ₹3,500–6,000 | Tier-2: ₹2,500–4,500 | Tier-3: ₹1,800–3,500
+
+REPAIR vs REPLACE guide:
+  Scratch only (no dent)        → refinishing only
+  Small dent < 5 cm, no cracks  → PDR repair ₹1,500–5,000 flat
+  Dent with paint damage         → panel repair + refinish
+  Crack / sharp deformation      → replacement
+  Structural deformation         → replacement + frame check
+  Total loss                     → salvage value = 5–15% of IDV
+{unknown_vehicle_note}
+─────────────────────────────────────────────────────────────────────
+
+TASK: Study the photo together with the bounding boxes. Itemise EVERY component
+that is visibly damaged — use the boxes as a guide, but trust your own reading of
+the photo over the box count (the detector often merges or misses parts).
+
+CRITICAL — do NOT under-itemise:
+- A bounding box labelled "dent" on a crushed area usually means the WHOLE panel
+  plus the parts behind it are destroyed. One box over the front end is NOT "one
+  bumper".
+- If the front end is crushed, itemise each affected part separately: front bumper,
+  bonnet/hood, grille, BOTH headlights, radiator, A/C condenser, BOTH front fenders,
+  and add a "Front structure / crash frame" line if metal is bent or the cabin is
+  pushed in. Do the same for rear-end or side impacts.
+- When the AI surveyor verdict above says TOTAL LOSS or severe structural damage,
+  the total MUST reflect a major rebuild (typically ₹1.5L+ for a compact car, often
+  exceeding the car's value). A few thousand rupees is wrong for a total loss.
+- Merge boxes only when they clearly sit on the SAME single component.
+
+Choose repair/replace/refinish per item and price using the table above. If the
+vehicle segment is known use that column; otherwise default to Compact SUV.
+Set is_total_loss=true if the surveyor flagged it or the damage is a clear write-off.
+
+Respond with valid JSON only — no other text:
+{{
+  "items": [
+    {{
+      "region_ids": [<int>, ...],
+      "component": "<specific part e.g. Front bumper, Left front door>",
+      "damage_type": "<dent|scratch|crack|broken|deformed|shattered|other>",
+      "repair_action": "<repair|replacement|refinishing|mechanical repair|total loss>",
+      "cost_min_inr": <integer>,
+      "cost_max_inr": <integer>
+    }}
+  ],
+  "total_min_inr": <integer>,
+  "total_max_inr": <integer>,
+  "is_total_loss": <true|false>,
+  "notes": "<one sentence: segment assumed + key caveat>"
+}}"""
 
 _openai_client = None
 _openai_checked = False
@@ -190,10 +289,133 @@ def assess_whole_image_vlm(image_path: Path) -> VLMSeverity | None:
         print(f"[vlm] whole-image assessment failed: {e}")
         return None
 
+def _describe_box(bbox: list[float], image_w: int, image_h: int) -> str:
+    """Human-readable location + frame coverage for a detection box, so the cost
+    VLM understands where each damage sits and how much of the car it spans."""
+    if image_w <= 0 or image_h <= 0:
+        return "unknown location"
+    x1, y1, x2, y2 = bbox
+    cx = (x1 + x2) / 2 / image_w
+    cy = (y1 + y2) / 2 / image_h
+    col = "left" if cx < 0.4 else ("right" if cx > 0.6 else "centre")
+    row = "upper" if cy < 0.4 else ("lower" if cy > 0.6 else "mid")
+    area = max(0.0, (x2 - x1)) * max(0.0, (y2 - y1)) / (image_w * image_h)
+    return f"{row}-{col}, covers {area:.0%} of frame"
+
+
+def estimate_repair_cost(
+    image_path: Path,
+    regions: list["RegionResult"],
+    car_make: str = "",
+    car_model: str = "",
+    car_year: int | None = None,
+    city: str = "",
+    image_w: int = 0,
+    image_h: int = 0,
+    vlm_severity: "VLMSeverity | None" = None,
+) -> "RepairCostBreakdown | None":
+    """Estimate per-component repair costs using gpt-4o-mini with the full image.
+
+    Receives the detection bounding boxes (location + frame coverage) and the
+    whole-vehicle surveyor verdict so the estimate reflects the FULL extent of
+    damage — not a single merged part. Returns None on failure (best-effort)."""
+    client = _get_openai_client()
+    if client is None:
+        return None
+    try:
+        import base64
+        # Build region list with spatial context from each bounding box.
+        lines = []
+        for i, r in enumerate(regions, 1):
+            sev = r.severity.severity if r.severity else "unknown"
+            loc = _describe_box(r.bbox_xyxy, image_w, image_h)
+            lines.append(f"  Box {i}: {r.class_name}, severity={sev}, "
+                         f"location={loc}, det_conf={r.detection_confidence:.0%}")
+        region_list = "\n".join(lines) if lines else "  No boxes detected."
+
+        # Surveyor verdict block — keeps cost consistent with the severity call.
+        if vlm_severity is not None:
+            tl = "YES — write-off" if vlm_severity.is_total_loss else "no"
+            surveyor_verdict = (
+                f"  Severity: {vlm_severity.severity.upper()}  |  Total loss: {tl}  |  "
+                f"Confidence: {vlm_severity.confidence:.0%}\n"
+                f"  Surveyor note: {vlm_severity.reasoning}"
+            )
+        else:
+            surveyor_verdict = "  (no whole-vehicle verdict available — judge from the photo)"
+
+        # Build vehicle info
+        parts = [car_make, car_model]
+        if car_year:
+            parts.append(f"({car_year})")
+        vehicle_info = " ".join(p for p in parts if p).strip() or \
+            "Unknown — defaulting to Compact SUV segment for pricing"
+
+        # Build location / labour tier info
+        location_info = city.strip() or "Unknown — defaulting to Tier-2 city labour rates"
+
+        # Note when vehicle details are absent
+        if not (car_make or car_model):
+            unknown_vehicle_note = (
+                "\nNOTE: No vehicle details provided. Compact SUV segment prices used as "
+                "default. Actual cost may differ significantly for budget or luxury vehicles."
+            )
+        else:
+            unknown_vehicle_note = ""
+
+        prompt = VLM_COST_PROMPT_TEMPLATE.format(
+            region_list=region_list,
+            surveyor_verdict=surveyor_verdict,
+            vehicle_info=vehicle_info,
+            location_info=location_info,
+            unknown_vehicle_note=unknown_vehicle_note,
+        )
+
+        # detail="high" — the model needs to actually see crush extent to itemise
+        # the parts behind a damaged panel; "low" downsamples too far for that.
+        b64 = base64.b64encode(Path(image_path).read_bytes()).decode("utf-8")
+        resp = client.chat.completions.create(
+            model=VLM_COST_MODEL,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image_url",
+                     "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}},
+                    {"type": "text", "text": prompt},
+                ],
+            }],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            max_tokens=1300,
+        )
+        data = json.loads(resp.choices[0].message.content)
+        items = []
+        for it in data.get("items", []):
+            items.append(CostEstimateItem(
+                region_ids=[int(x) for x in it.get("region_ids", [])],
+                component=str(it.get("component", "Unknown")),
+                damage_type=str(it.get("damage_type", "unknown")),
+                repair_action=str(it.get("repair_action", "repair")),
+                cost_min_inr=int(it.get("cost_min_inr", 0)),
+                cost_max_inr=int(it.get("cost_max_inr", 0)),
+            ))
+        return RepairCostBreakdown(
+            items=items,
+            total_min_inr=int(data.get("total_min_inr", 0)),
+            total_max_inr=int(data.get("total_max_inr", 0)),
+            is_total_loss=bool(data.get("is_total_loss", False)),
+            notes=str(data.get("notes", "")),
+            model=VLM_COST_MODEL,
+        )
+    except Exception as e:
+        print(f"[cost] repair cost estimation failed: {e}")
+        return None
+
+
 # Fixed detection confidence — low so ALL damage is caught consistently. Severity
 # must not depend on a user-tunable threshold (a high threshold drops low-confidence
 # damages, shrinks the score, and makes a totalled car read as moderate).
-DETECTION_CONF = 0.10
+DETECTION_CONF = 0.15
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +447,26 @@ class VLMSeverity(BaseModel):
     model: str
 
 
+class CostEstimateItem(BaseModel):
+    """Per-component repair cost estimated by the VLM."""
+    region_ids: list[int] = Field(default_factory=list, description="Which detected regions this covers")
+    component: str = Field(..., description="Car part name, e.g. 'Front bumper'")
+    damage_type: str
+    repair_action: str = Field(..., description="repair | replacement | refinishing | mechanical repair | total loss")
+    cost_min_inr: int
+    cost_max_inr: int
+
+
+class RepairCostBreakdown(BaseModel):
+    """Full itemised repair cost estimate from VLM analysis."""
+    items: list[CostEstimateItem]
+    total_min_inr: int
+    total_max_inr: int
+    is_total_loss: bool = False
+    notes: str
+    model: str
+
+
 class Aggregation(BaseModel):
     """Image-level severity reasoning — how per-crop results roll up to the car."""
     overall: str = Field(..., description="Vehicle-level severity: mild | moderate | severe | unknown")
@@ -249,9 +491,13 @@ class PipelineResult(BaseModel):
     vlm_assessment: VLMSeverity | None = Field(
         default=None, description="Whole-image VLM severity (None if VLM unavailable)"
     )
+    cost_estimate: "RepairCostBreakdown | None" = Field(
+        default=None, description="VLM repair cost breakdown (None if unavailable)"
+    )
     detection_time_ms: float
     severity_time_ms: float
     vlm_time_ms: float = 0.0
+    cost_time_ms: float = 0.0
     total_time_ms: float
     stage1_model: str
     stage2_model: str
@@ -502,6 +748,10 @@ def run_image(
     use_vlm: bool = True,
     stage1_name: str = "yolo11s-v2-5class",
     stage2_name: str = "efficientnet-b0-v6",
+    car_make: str = "",
+    car_model: str = "",
+    car_year: int | None = None,
+    city: str = "",
 ) -> PipelineResult:
     t_start = time.perf_counter()
 
@@ -511,14 +761,26 @@ def run_image(
     routings = [r.severity.routing for r in regions if r.severity]
     aggregation = aggregate_severity(regions, detection.image_width, detection.image_height)
 
-    # Whole-image VLM call (best-effort). It sees the entire car, so it is the
-    # authoritative vehicle-level judge — especially for total-loss.
+    # Whole-image VLM calls (both best-effort). Run severity FIRST, then feed its
+    # verdict into the cost call so the two never contradict (e.g. surveyor says
+    # total-loss while cost shows a single bumper). The cost call also receives the
+    # detection boxes (location + coverage) to itemise the full extent of damage.
     vlm_assessment = None
-    vlm_ms = 0.0
+    cost_estimate   = None
+    vlm_ms  = 0.0
+    cost_ms = 0.0
     if use_vlm:
         t_vlm = time.perf_counter()
         vlm_assessment = assess_whole_image_vlm(image_path)
         vlm_ms = (time.perf_counter() - t_vlm) * 1000.0
+
+        t_cost = time.perf_counter()
+        cost_estimate = estimate_repair_cost(
+            image_path, regions, car_make, car_model, car_year, city,
+            image_w=detection.image_width, image_h=detection.image_height,
+            vlm_severity=vlm_assessment,
+        )
+        cost_ms = (time.perf_counter() - t_cost) * 1000.0
 
     # Reconcile: take the WORST of {VLM, crop-heuristic}. Never under-call a
     # total loss — over-calling only routes to a human, which is the safe direction.
@@ -553,9 +815,11 @@ def run_image(
         severity_source=severity_source,
         aggregation=aggregation,
         vlm_assessment=vlm_assessment,
+        cost_estimate=cost_estimate,
         detection_time_ms=round(det_ms, 1),
         severity_time_ms=round(sev_ms, 1),
         vlm_time_ms=round(vlm_ms, 1),
+        cost_time_ms=round(cost_ms, 1),
         total_time_ms=round(total_ms, 1),
         stage1_model=stage1_name,
         stage2_model=stage2_name,

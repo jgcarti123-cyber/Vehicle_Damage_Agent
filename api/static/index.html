@@ -3,400 +3,984 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vehicle Damage Assessment</title>
+<title>AEGIS — Vehicle Damage Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1419;
-    --panel: #1a2029;
-    --border: #2a323d;
-    --text: #e4e8ee;
-    --muted: #8a94a3;
-    --accent: #3b82f6;
-    --mild: #22c55e;
-    --moderate: #f59e0b;
-    --severe: #ef4444;
-    --auto: #22c55e;
-    --confirm: #f59e0b;
-    --review: #ef4444;
+    --bg:        #08080a;
+    --bg-2:      #0d0d10;
+    --surface:   #131317;
+    --surface-2: #1a1a1f;
+    --surface-3: #212128;
+    --border:    #26262d;
+    --border-2:  #34343d;
+
+    --red:       #e5101d;
+    --red-bright:#ff2433;
+    --red-dim:   rgba(229,16,29,0.12);
+    --red-glow:  rgba(229,16,29,0.35);
+
+    --text:      #f4f4f6;
+    --text-2:    #c4c4cc;
+    --muted:     #82828c;
+    --faint:     #565660;
+
+    --mild:      #2dd46a;
+    --moderate:  #f5a524;
+    --severe:    #ff2433;
+
+    --ok:        #2dd46a;
+    --warn:      #f5a524;
+    --danger:    #ff2433;
+
+    --radius:    14px;
+    --radius-sm: 9px;
+    --ease:      cubic-bezier(0.16, 1, 0.3, 1);
+    --shadow:    0 24px 60px -20px rgba(0,0,0,0.8);
   }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     background: var(--bg);
     color: var(--text);
     line-height: 1.5;
-    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
   }
-  .container { max-width: 1100px; margin: 0 auto; }
-  header { margin-bottom: 24px; }
-  h1 { font-size: 1.6rem; font-weight: 600; }
-  .subtitle { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
-
-  .upload-zone {
-    border: 2px dashed var(--border);
-    border-radius: 12px;
-    padding: 40px 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    background: var(--panel);
+  /* Ambient background */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(900px 500px at 78% -8%, rgba(229,16,29,0.10), transparent 60%),
+      radial-gradient(700px 500px at 10% 110%, rgba(229,16,29,0.05), transparent 60%);
+    pointer-events: none; z-index: 0;
   }
-  .upload-zone:hover, .upload-zone.dragover {
-    border-color: var(--accent);
-    background: #1e2733;
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: 56px 56px;
+    pointer-events: none; z-index: 0;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 40%, transparent 100%);
   }
-  .upload-zone p { color: var(--muted); margin-top: 8px; font-size: 0.9rem; }
-  .upload-icon { font-size: 2.5rem; opacity: 0.6; }
+  .wrap { position: relative; z-index: 1; max-width: 1240px; margin: 0 auto; padding: 0 28px 80px; }
 
-  .controls {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    margin: 16px 0;
-    flex-wrap: wrap;
-  }
-  .control-group { display: flex; align-items: center; gap: 8px; }
-  label { font-size: 0.85rem; color: var(--muted); }
-  input[type="range"] { width: 140px; accent-color: var(--accent); }
-  .conf-value { font-variant-numeric: tabular-nums; min-width: 32px; }
-
-  button {
-    background: var(--accent);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: opacity 0.2s;
-  }
-  button:hover { opacity: 0.9; }
-  button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .results { margin-top: 24px; display: none; }
-  .results.visible { display: block; }
-  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; }
-  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
-
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-  }
-  .panel h2 { font-size: 1rem; margin-bottom: 12px; font-weight: 600; }
-  .image-wrap img { width: 100%; border-radius: 8px; display: block; }
-
-  .summary-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
+  /* ───── Top nav ───── */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 28px;
+    backdrop-filter: blur(16px);
+    background: rgba(8,8,10,0.72);
     border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
   }
-  .summary-row:last-child { border-bottom: none; }
-  .summary-row .key { color: var(--muted); }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .mark {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: grid; place-items: center;
+    background: linear-gradient(145deg, var(--red), #8c0a12);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 6px 20px -6px var(--red-glow);
+  }
+  .brand .mark svg { width: 21px; height: 21px; }
+  .brand .name { font-weight: 800; font-size: 1.06rem; letter-spacing: 0.14em; }
+  .brand .name span { color: var(--red); }
+  .brand .tag { font-size: 0.66rem; letter-spacing: 0.28em; color: var(--muted); text-transform: uppercase; margin-top: 1px; }
+  .nav-right { display: flex; align-items: center; gap: 18px; }
+  .nav-status { display: flex; align-items: center; gap: 8px; font-size: 0.74rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); transition: all 0.3s; }
+  .dot.live { background: var(--mild); box-shadow: 0 0 0 0 rgba(45,212,106,0.6); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(45,212,106,0.5);} 70%{box-shadow:0 0 0 7px rgba(45,212,106,0);} 100%{box-shadow:0 0 0 0 rgba(45,212,106,0);} }
+  .ghost-btn {
+    display: none; align-items: center; gap: 7px;
+    background: var(--surface-2); color: var(--text-2);
+    border: 1px solid var(--border-2); border-radius: 8px;
+    padding: 8px 14px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    font-family: inherit; transition: all 0.2s;
+  }
+  .ghost-btn:hover { border-color: var(--red); color: #fff; }
+  .ghost-btn svg { width: 15px; height: 15px; }
+  .ghost-btn.show { display: flex; }
 
-  .badge {
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 20px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
+  /* ───── Hero ───── */
+  .hero { text-align: center; padding: 52px 0 34px; }
+  .hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--red); font-weight: 700;
+    padding: 6px 14px; border: 1px solid var(--red-dim); border-radius: 30px;
+    background: var(--red-dim); margin-bottom: 22px;
   }
-  .sev-mild { background: rgba(34,197,94,0.15); color: var(--mild); }
-  .sev-moderate { background: rgba(245,158,11,0.15); color: var(--moderate); }
-  .sev-severe { background: rgba(239,68,68,0.15); color: var(--severe); }
-  .sev-unknown { background: rgba(138,148,163,0.15); color: var(--muted); }
+  .hero h1 { font-size: clamp(2rem, 5vw, 3.3rem); font-weight: 900; letter-spacing: -0.02em; line-height: 1.05; }
+  .hero h1 .accent { background: linear-gradient(120deg, #fff 20%, var(--red-bright)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .hero p { color: var(--muted); font-size: 1.02rem; max-width: 560px; margin: 16px auto 0; }
+  .pipeline-chips { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
+  .pchip { display: flex; align-items: center; gap: 8px; font-size: 0.76rem; color: var(--text-2); background: var(--surface); border: 1px solid var(--border); border-radius: 30px; padding: 7px 15px; }
+  .pchip svg { width: 14px; height: 14px; color: var(--red); }
+  .pchip .num { font-family: 'JetBrains Mono', monospace; color: var(--faint); font-size: 0.68rem; }
 
-  .route-auto_classify { background: rgba(34,197,94,0.15); color: var(--auto); }
-  .route-suggest_human_confirm { background: rgba(245,158,11,0.15); color: var(--confirm); }
-  .route-human_review { background: rgba(239,68,68,0.15); color: var(--review); }
+  /* ───── Cards / panels ───── */
+  .card {
+    background: linear-gradient(180deg, var(--surface), var(--bg-2));
+    border: 1px solid var(--border); border-radius: var(--radius);
+    position: relative;
+  }
+  .card-head { display: flex; align-items: center; gap: 11px; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+  .card-head .ic { width: 32px; height: 32px; border-radius: 8px; background: var(--red-dim); display: grid; place-items: center; flex-shrink: 0; }
+  .card-head .ic svg { width: 17px; height: 17px; color: var(--red); }
+  .card-head h2 { font-size: 0.96rem; font-weight: 700; letter-spacing: 0.01em; }
+  .card-head .sub { font-size: 0.74rem; color: var(--muted); margin-top: 1px; }
+  .card-body { padding: 22px; }
 
-  .region {
-    background: #141a22;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 10px;
-  }
-  .region-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-  .region-title { font-weight: 600; font-size: 0.92rem; }
-  .badges { display: flex; gap: 6px; }
-  .prob-bars { margin-top: 8px; }
-  .prob-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 3px 0;
-    font-size: 0.75rem;
-  }
-  .prob-bar .plabel { width: 64px; color: var(--muted); }
-  .prob-track {
-    flex: 1;
-    height: 6px;
-    background: #0c1116;
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  .prob-fill { height: 100%; border-radius: 3px; }
-  .prob-pct { width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+  /* ───── Intake layout ───── */
+  .intake { display: grid; grid-template-columns: 1.15fr 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 900px) { .intake { grid-template-columns: 1fr; } }
 
-  .reason {
-    margin-top: 12px;
-    padding: 10px 12px;
-    background: #141a22;
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
-    border-radius: 6px;
-    font-size: 0.82rem;
-    color: var(--text);
-    line-height: 1.45;
+  /* Dropzone */
+  .dropzone {
+    border: 2px dashed var(--border-2); border-radius: var(--radius);
+    min-height: 320px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    cursor: pointer; transition: all 0.25s var(--ease);
+    background: radial-gradient(circle at 50% 40%, rgba(229,16,29,0.04), transparent 70%);
+    text-align: center; padding: 30px; position: relative; overflow: hidden;
   }
-  .reason.escalated { border-left-color: var(--severe); }
-  .reason-block { margin-bottom: 10px; }
+  .dropzone:hover, .dropzone.drag { border-color: var(--red); background: radial-gradient(circle at 50% 40%, rgba(229,16,29,0.12), transparent 70%); }
+  .dropzone.drag { transform: scale(0.99); }
+  .dz-icon { width: 60px; height: 60px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--border-2); display: grid; place-items: center; transition: all 0.25s; }
+  .dropzone:hover .dz-icon { border-color: var(--red); transform: translateY(-3px); }
+  .dz-icon svg { width: 28px; height: 28px; color: var(--red); }
+  .dz-title { font-weight: 700; font-size: 1.05rem; }
+  .dz-title b { color: var(--red); }
+  .dz-sub { font-size: 0.8rem; color: var(--muted); }
+  .dz-formats { display: flex; gap: 7px; margin-top: 4px; }
+  .dz-formats span { font-size: 0.64rem; letter-spacing: 0.08em; color: var(--faint); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; text-transform: uppercase; }
+
+  /* Preview */
+  .preview { position: relative; width: 100%; border-radius: var(--radius); overflow: hidden; display: none; }
+  .preview.show { display: block; }
+  .preview img { width: 100%; display: block; max-height: 360px; object-fit: cover; }
+  .preview .ov { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(8,8,10,0.92)); display: flex; align-items: flex-end; padding: 16px; }
+  .preview .fname { font-size: 0.82rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .preview .fname svg { width: 15px; height: 15px; color: var(--red); }
+  .preview .change { position: absolute; top: 12px; right: 12px; z-index: 10; background: rgba(8,8,10,0.8); backdrop-filter: blur(8px); border: 1px solid var(--border-2); border-radius: 8px; padding: 7px 12px; font-size: 0.74rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+  .preview .change:hover { border-color: var(--red); color: #fff; }
+  .preview .change svg { width: 13px; height: 13px; }
+  /* scan line during processing */
+  .preview .scan { position: absolute; left: 0; right: 0; height: 3px; top: 0; background: linear-gradient(90deg, transparent, var(--red-bright), transparent); box-shadow: 0 0 18px 3px var(--red-glow); opacity: 0; }
+  .preview.scanning .scan { opacity: 1; animation: scanmove 1.5s ease-in-out infinite; }
+  @keyframes scanmove { 0%{top:0;} 50%{top:calc(100% - 3px);} 100%{top:0;} }
+
+  /* Vehicle form */
+  .vfields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .vfield.full { grid-column: 1 / -1; }
+  .vfield label { display: block; font-size: 0.7rem; color: var(--muted); margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+  .vfield .input-wrap { position: relative; }
+  .vfield .input-wrap > svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--faint); pointer-events: none; transition: color 0.2s; }
+  .vfield input {
+    width: 100%; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: var(--radius-sm);
+    color: var(--text); font-size: 0.9rem; font-family: inherit; padding: 11px 12px 11px 38px;
+    outline: none; transition: all 0.2s;
+  }
+  .vfield input:focus { border-color: var(--red); background: var(--surface); box-shadow: 0 0 0 3px var(--red-dim); }
+  .vfield input:focus + svg, .vfield .input-wrap:focus-within > svg { color: var(--red); }
+  .vfield input::placeholder { color: var(--faint); }
+  .form-hint { font-size: 0.74rem; color: var(--muted); margin-top: 14px; display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; }
+  .form-hint svg { width: 15px; height: 15px; color: var(--faint); flex-shrink: 0; margin-top: 1px; }
+
+  /* CTA */
+  .cta-row { margin-top: 22px; }
+  .btn-primary {
+    width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+    background: linear-gradient(145deg, var(--red), #ab0c15); color: #fff;
+    border: none; border-radius: var(--radius-sm); padding: 15px; font-size: 0.98rem; font-weight: 700;
+    cursor: pointer; font-family: inherit; letter-spacing: 0.02em; position: relative; overflow: hidden;
+    box-shadow: 0 10px 30px -10px var(--red-glow); transition: all 0.22s var(--ease);
+  }
+  .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 16px 40px -12px var(--red-glow); }
+  .btn-primary:active:not(:disabled) { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+  .btn-primary svg { width: 18px; height: 18px; }
+  .btn-primary .spin { width: 17px; height: 17px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: rot 0.7s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  /* ───── Processing pipeline ───── */
+  .processing { display: none; margin-top: 26px; }
+  .processing.show { display: block; }
+  .stages { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 760px) { .stages { grid-template-columns: 1fr 1fr; } }
+  .stage {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 18px; position: relative; overflow: hidden; transition: all 0.4s var(--ease);
+  }
+  .stage .st-ic { width: 34px; height: 34px; border-radius: 9px; background: var(--surface-3); display: grid; place-items: center; margin-bottom: 12px; transition: all 0.4s; }
+  .stage .st-ic svg { width: 18px; height: 18px; color: var(--faint); transition: color 0.4s; }
+  .stage .st-name { font-size: 0.84rem; font-weight: 600; color: var(--muted); transition: color 0.4s; }
+  .stage .st-status { font-size: 0.68rem; color: var(--faint); margin-top: 3px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.03em; }
+  .stage .st-bar { position: absolute; bottom: 0; left: 0; height: 2px; width: 0; background: var(--red); transition: width 0.5s linear; }
+  .stage.active { border-color: var(--red); box-shadow: 0 0 0 1px var(--red-dim), 0 8px 24px -12px var(--red-glow); }
+  .stage.active .st-ic { background: var(--red-dim); }
+  .stage.active .st-ic svg { color: var(--red); animation: throb 1s ease-in-out infinite; }
+  .stage.active .st-name { color: #fff; }
+  .stage.active .st-bar { width: 100%; }
+  @keyframes throb { 50% { transform: scale(1.15); } }
+  .stage.done .st-ic { background: rgba(45,212,106,0.12); }
+  .stage.done .st-ic svg { color: var(--mild); animation: none; }
+  .stage.done .st-name { color: var(--text-2); }
+  .stage.done .st-status { color: var(--mild); }
+  .stage.done .st-bar { width: 100%; background: var(--mild); }
+
+  /* ───── Results ───── */
+  .results { display: none; margin-top: 12px; }
+  .results.show { display: block; }
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.6s var(--ease), transform 0.6s var(--ease); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ── Verdict card ── */
+  .verdict {
+    border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--surface);
+    overflow: hidden; margin-bottom: 22px; position: relative;
+  }
+  .verdict .accent-bar { height: 3px; width: 100%; }
+
+  .verdict-grid { display: grid; grid-template-columns: 1fr 380px; }
+  @media (max-width: 860px) { .verdict-grid { grid-template-columns: 1fr; } }
+
+  /* Left — severity */
+  .verdict-main { padding: 28px 32px 26px; border-right: 1px solid var(--border); position: relative; overflow: hidden; }
+  @media (max-width: 860px) { .verdict-main { border-right: none; border-bottom: 1px solid var(--border); } }
+  /* faint glow behind the verdict word */
+  .verdict-main::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 55% 70% at 0% 50%, var(--v-glow, rgba(45,212,106,0.07)), transparent);
+    pointer-events: none;
+  }
+  .verdict-label { font-size: 0.66rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .sev-word { font-size: 3rem; font-weight: 900; letter-spacing: -0.02em; line-height: 1; text-transform: uppercase; margin: 10px 0 0; }
+
+  /* severity meter strip */
+  .sev-meter { display: flex; align-items: center; gap: 0; margin: 16px 0 0; border-radius: 8px; overflow: hidden; height: 8px; background: var(--bg); }
+  .sev-seg { height: 100%; flex: 1; opacity: 0.22; transition: opacity 0.4s; }
+  .sev-seg.mild-seg { background: var(--mild); border-radius: 8px 0 0 8px; }
+  .sev-seg.mod-seg  { background: var(--moderate); }
+  .sev-seg.sev-seg  { background: var(--severe); border-radius: 0 8px 8px 0; }
+  .sev-seg.active   { opacity: 1; }
+  .sev-meter-labels { display: flex; margin-top: 5px; }
+  .sev-meter-labels span { flex: 1; font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .sev-meter-labels span:nth-child(2) { text-align: center; }
+  .sev-meter-labels span:last-child   { text-align: right; }
+
+  /* stat chips */
+  .stat-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .stat-chip { display: flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--border); font-size: 0.78rem; }
+  .stat-chip svg { width: 14px; height: 14px; color: var(--muted); flex-shrink: 0; }
+  .stat-chip .sc-val { font-weight: 700; color: var(--text); }
+  .stat-chip .sc-lbl { color: var(--muted); margin-left: 3px; }
+
+  .route-pill { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; padding: 10px 16px; border-radius: 10px; font-size: 0.82rem; font-weight: 700; border: 1px solid transparent; }
+  .route-pill svg { width: 15px; height: 15px; }
+  .route-pill.bg-mild     { background: rgba(45,212,106,0.1);  border-color: rgba(45,212,106,0.25); }
+  .route-pill.bg-moderate { background: rgba(245,165,36,0.1);  border-color: rgba(245,165,36,0.25); }
+  .route-pill.bg-severe   { background: rgba(255,36,51,0.1);   border-color: rgba(255,36,51,0.25);  }
+
+  /* Right — cost */
+  .verdict-cost {
+    padding: 28px 32px 26px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    background: linear-gradient(135deg, var(--bg-2) 0%, rgba(229,16,29,0.04) 100%);
+    border-left: 1px solid var(--border);
+    position: relative; overflow: hidden;
+  }
+  @media (max-width: 860px) { .verdict-cost { border-left: none; border-top: 1px solid var(--border); } }
+  .verdict-cost::after {
+    content: ""; position: absolute; top: -60px; right: -60px;
+    width: 200px; height: 200px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(229,16,29,0.12), transparent 70%);
+    pointer-events: none;
+  }
+  .vc-top { }
+  .vc-label { font-size: 0.66rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .vc-amount { font-family: 'JetBrains Mono', monospace; font-size: 2.8rem; font-weight: 700; letter-spacing: -0.03em; margin-top: 10px; line-height: 1; }
+  .vc-amount .cur { color: var(--red); font-size: 2rem; vertical-align: 0.2em; margin-right: 2px; }
+  .vc-range { font-size: 0.78rem; color: var(--muted); margin-top: 8px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.02em; }
+  .vc-na { font-size: 0.9rem; color: var(--muted); margin-top: 10px; }
+  .vc-bottom { }
+  .vc-divider { height: 1px; background: var(--border); margin: 18px 0; }
+  .vc-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .vc-meta-item .vm-label { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+  .vc-meta-item .vm-val   { font-size: 0.84rem; font-weight: 600; margin-top: 3px; color: var(--text-2); }
+
+  /* total loss banner */
+  .tl-banner { display: flex; align-items: center; gap: 12px; margin: 0 0 22px; padding: 16px 20px; border-radius: var(--radius-sm); background: linear-gradient(90deg, rgba(255,36,51,0.14), rgba(255,36,51,0.04)); border: 1px solid rgba(255,36,51,0.4); }
+  .tl-banner svg { width: 26px; height: 26px; color: var(--severe); flex-shrink: 0; }
+  .tl-banner b { color: var(--severe); }
+  .tl-banner .sub { font-size: 0.82rem; color: var(--text-2); }
+
+  /* results columns */
+  .res-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 940px) { .res-grid { grid-template-columns: 1fr; } }
+
+  .annot-img { width: 100%; display: block; }
+  .img-foot { padding: 12px 16px; border-top: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 14px; }
+  .img-foot span { display: flex; align-items: center; gap: 5px; }
+  .img-foot b { color: var(--text-2); font-weight: 500; }
+
+  /* reasoning blocks */
+  .reason-block { padding: 16px 18px; border-radius: var(--radius-sm); background: var(--bg-2); border: 1px solid var(--border); margin-bottom: 12px; }
   .reason-block:last-child { margin-bottom: 0; }
-  .reason .reason-tag {
-    display: block;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--muted);
-    margin-bottom: 4px;
-  }
-  .timing { color: var(--muted); font-size: 0.8rem; margin-top: 12px; }
-  .spinner {
-    display: none;
-    text-align: center;
-    padding: 30px;
-    color: var(--muted);
-  }
-  .spinner.visible { display: block; }
-  .error {
-    display: none;
-    background: rgba(239,68,68,0.1);
-    border: 1px solid var(--severe);
-    color: var(--severe);
-    padding: 12px;
-    border-radius: 8px;
-    margin-top: 16px;
-    font-size: 0.85rem;
-  }
-  .error.visible { display: block; }
-  .empty { color: var(--muted); font-size: 0.88rem; padding: 12px 0; }
+  .rb-head { display: flex; align-items: center; gap: 8px; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
+  .rb-head svg { width: 14px; height: 14px; color: var(--red); }
+  .rb-verdict { font-weight: 700; font-size: 0.92rem; }
+  .rb-text { font-size: 0.85rem; color: var(--text-2); margin-top: 4px; line-height: 1.55; }
+
+  /* region cards */
+  .region { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 15px 16px; margin-bottom: 11px; transition: border-color 0.2s, transform 0.2s; }
+  .region:hover { border-color: var(--border-2); transform: translateX(2px); }
+  .region-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .region-id { display: flex; align-items: center; gap: 10px; }
+  .region-id .rnum { width: 26px; height: 26px; border-radius: 7px; background: var(--surface-3); display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; font-weight: 600; color: var(--text-2); }
+  .region-id .rname { font-weight: 600; font-size: 0.9rem; text-transform: capitalize; }
+  .region-id .rconf { font-size: 0.68rem; color: var(--faint); font-family: 'JetBrains Mono', monospace; }
+  .chip { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 9px; border-radius: 6px; }
+  .prob-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+  .prob-row .pl { width: 60px; font-size: 0.72rem; color: var(--muted); text-transform: capitalize; }
+  .prob-track { flex: 1; height: 7px; background: #000; border-radius: 4px; overflow: hidden; }
+  .prob-fill { height: 100%; width: 0; border-radius: 4px; transition: width 0.9s var(--ease); }
+  .prob-pct { width: 42px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-2); }
+
+  /* cost table */
+  .cost-card { margin-top: 22px; }
+  .cost-table { width: 100%; border-collapse: collapse; }
+  .cost-table thead th { text-align: left; padding: 12px 14px; font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--border); background: var(--bg-2); }
+  .cost-table thead th:last-child { text-align: right; }
+  .cost-table tbody td { padding: 14px; border-bottom: 1px solid var(--border); font-size: 0.86rem; vertical-align: middle; }
+  .cost-table tbody tr { transition: background 0.15s; }
+  .cost-table tbody tr:hover { background: var(--surface); }
+  .ct-num { color: var(--faint); font-family: 'JetBrains Mono', monospace; width: 36px; }
+  .ct-comp { font-weight: 600; }
+  .ct-dmg { color: var(--muted); text-transform: capitalize; }
+  .ct-cost { text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: 600; white-space: nowrap; }
+  .act-badge { display: inline-block; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 4px 9px; border-radius: 6px; }
+  .act-repair      { background: rgba(45,212,106,0.13); color: var(--mild); }
+  .act-replacement { background: rgba(255,36,51,0.13); color: var(--severe); }
+  .act-refinishing { background: rgba(96,165,250,0.13); color: #60a5fa; }
+  .act-mechanical  { background: rgba(245,165,36,0.13); color: var(--moderate); }
+  .act-total       { background: rgba(255,36,51,0.22); color: var(--severe); }
+  .cost-table tfoot td { padding: 16px 14px; font-weight: 700; border-top: 2px solid var(--border-2); background: var(--bg-2); }
+  .cost-table tfoot .ct-cost { font-size: 1.05rem; color: var(--text); }
+  .cost-notes { padding: 14px 18px; font-size: 0.76rem; color: var(--muted); display: flex; gap: 8px; line-height: 1.55; border-top: 1px solid var(--border); }
+  .cost-notes svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; color: var(--faint); }
+
+  /* error */
+  .error { display: none; margin-top: 20px; padding: 16px 18px; border-radius: var(--radius-sm); background: rgba(255,36,51,0.08); border: 1px solid rgba(255,36,51,0.4); color: var(--severe); font-size: 0.86rem; align-items: center; gap: 10px; }
+  .error.show { display: flex; }
+  .error svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+  .empty-note { color: var(--muted); font-size: 0.86rem; text-align: center; padding: 24px; }
+
+  /* severity color helpers */
+  .c-mild { color: var(--mild); } .bg-mild { background: rgba(45,212,106,0.13); color: var(--mild); }
+  .c-moderate { color: var(--moderate); } .bg-moderate { background: rgba(245,165,36,0.13); color: var(--moderate); }
+  .c-severe { color: var(--severe); } .bg-severe { background: rgba(255,36,51,0.13); color: var(--severe); }
+  .c-unknown { color: var(--muted); } .bg-unknown { background: var(--surface-3); color: var(--muted); }
+
+  .sec-gap { margin-top: 22px; }
 </style>
 </head>
 <body>
-<div class="container">
-  <header>
-    <h1>🚗 Vehicle Damage Assessment</h1>
-    <p class="subtitle">Stage 1 (YOLOv11 detection) + Stage 2 (EfficientNet-B0 severity) · full-stack test</p>
-  </header>
 
-  <div class="upload-zone" id="uploadZone">
-    <div class="upload-icon">📤</div>
-    <strong>Click to upload</strong> or drag &amp; drop a vehicle photo
-    <p>JPEG · PNG · WEBP — max 20 MB</p>
-    <input type="file" id="fileInput" accept="image/*" hidden>
-  </div>
-
-  <div class="controls">
-    <button id="assessBtn" disabled>Assess Damage</button>
-    <span id="fileName" style="color:var(--muted);font-size:0.85rem;"></span>
-  </div>
-
-  <div class="error" id="errorBox"></div>
-
-  <div class="spinner" id="spinner">⏳ Running detection + severity classification…</div>
-
-  <div class="results" id="results">
-    <div class="grid">
-      <div class="panel image-wrap">
-        <h2>Annotated Result</h2>
-        <img id="annotatedImg" alt="annotated result">
-        <div class="timing" id="timing"></div>
-      </div>
-      <div class="panel">
-        <h2>Assessment Summary</h2>
-        <div class="summary-row">
-          <span class="key">Damages found</span>
-          <span id="numDamages">—</span>
-        </div>
-        <div class="summary-row">
-          <span class="key">Overall severity</span>
-          <span id="overallSeverity">—</span>
-        </div>
-        <div class="summary-row">
-          <span class="key">Overall routing</span>
-          <span id="overallRouting">—</span>
-        </div>
-        <div class="reason" id="reasonBox"></div>
-        <h2 style="margin-top:18px;">Damage Regions</h2>
-        <div id="regions"></div>
-      </div>
+<nav>
+  <div class="brand">
+    <div class="mark">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L3 6v6c0 5 3.8 8.5 9 10 5.2-1.5 9-5 9-10V6l-9-4z" fill="#fff" opacity="0.92"/><path d="M9 12l2 2 4-4" stroke="#e5101d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div>
+      <div class="name">AE<span>G</span>IS</div>
+      <div class="tag">Damage Intelligence</div>
     </div>
   </div>
+  <div class="nav-right">
+    <div class="nav-status"><span class="dot" id="statusDot"></span><span id="statusText">Connecting</span></div>
+    <button class="ghost-btn" id="newBtn"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.4 2.6L3 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3v5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>New Assessment</button>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <span class="eyebrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Real-time AI inspection</span>
+    <h1>Assess crash damage in <span class="accent">seconds</span></h1>
+    <p>Upload a photo. Our two-stage vision pipeline detects every damaged panel, grades severity, and an AI surveyor estimates the repair bill at Indian market rates.</p>
+    <div class="pipeline-chips">
+      <div class="pchip"><span class="num">01</span><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 9h18M9 21V9" stroke="currentColor" stroke-width="2"/></svg>Detection</div>
+      <div class="pchip"><span class="num">02</span><svg viewBox="0 0 24 24" fill="none"><path d="M3 12h4l3 8 4-16 3 8h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Severity grading</div>
+      <div class="pchip"><span class="num">03</span><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 9h6v6H9z" stroke="currentColor" stroke-width="2"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>AI surveyor</div>
+      <div class="pchip"><span class="num">04</span><svg viewBox="0 0 24 24" fill="none"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Cost estimate</div>
+    </div>
+  </section>
+
+  <!-- INTAKE -->
+  <section class="intake" id="intake">
+    <div class="card">
+      <div class="card-head">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 9l5-5 5 5M12 4v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div><h2>Upload Photo</h2><div class="sub">Clear shot of the damaged area</div></div>
+      </div>
+      <div class="card-body">
+        <input type="file" id="fileInput" accept="image/*" hidden>
+        <div class="dropzone" id="dropzone">
+          <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 9l5-5 5 5M12 4v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="dz-title">Drop image or <b>browse</b></div>
+          <div class="dz-sub">Drag a vehicle photo here</div>
+          <div class="dz-formats"><span>JPEG</span><span>PNG</span><span>WEBP</span><span>20MB</span></div>
+        </div>
+        <div class="preview" id="preview">
+          <img id="previewImg" alt="preview">
+          <div class="scan"></div>
+          <button class="change" id="changeBtn"><svg viewBox="0 0 24 24" fill="none"><path d="M3 7h3l2-3h8l2 3h3v13H3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" stroke="currentColor" stroke-width="2"/></svg>Change</button>
+          <div class="ov"><div class="fname"><svg viewBox="0 0 24 24" fill="none"><path d="M4 4h11l5 5v11H4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 4v6h6" stroke="currentColor" stroke-width="2"/></svg><span id="fileName"></span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none"><path d="M5 13l1.5-4.5A2 2 0 0 1 8.4 7h7.2a2 2 0 0 1 1.9 1.5L19 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 13h14v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H8v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7.5" cy="15.5" r="0.8" fill="currentColor"/><circle cx="16.5" cy="15.5" r="0.8" fill="currentColor"/></svg></div>
+        <div><h2>Vehicle Details</h2><div class="sub">Optional — sharpens cost accuracy</div></div>
+      </div>
+      <div class="card-body">
+        <div class="vfields">
+          <div class="vfield">
+            <label for="carMake">Make</label>
+            <div class="input-wrap">
+              <input id="carMake" list="makeList" placeholder="Maruti Suzuki" autocomplete="off">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M5 13l1.5-4.5A2 2 0 0 1 8.4 7h7.2a2 2 0 0 1 1.9 1.5L19 13v4H5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+            </div>
+            <datalist id="makeList"><option value="Maruti Suzuki"><option value="Hyundai"><option value="Tata"><option value="Honda"><option value="Toyota"><option value="Mahindra"><option value="Kia"><option value="Renault"><option value="Nissan"><option value="Volkswagen"><option value="Skoda"><option value="MG"><option value="Ford"><option value="BMW"><option value="Mercedes-Benz"><option value="Audi"><option value="Jeep"></datalist>
+          </div>
+          <div class="vfield">
+            <label for="carModel">Model</label>
+            <div class="input-wrap">
+              <input id="carModel" list="modelList" placeholder="Swift" autocomplete="off">
+              <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <datalist id="modelList"><option value="Alto K10"><option value="WagonR"><option value="Swift"><option value="Baleno"><option value="Brezza"><option value="Ertiga"><option value="Dzire"><option value="i10 Nios"><option value="i20"><option value="Venue"><option value="Creta"><option value="Tucson"><option value="Nexon"><option value="Punch"><option value="Harrier"><option value="Safari"><option value="City"><option value="Amaze"><option value="Fortuner"><option value="Innova Crysta"><option value="Glanza"><option value="Sonet"><option value="Seltos"><option value="Thar"><option value="XUV300"><option value="XUV700"><option value="Scorpio N"></datalist>
+          </div>
+          <div class="vfield">
+            <label for="carYear">Year</label>
+            <div class="input-wrap">
+              <input id="carYear" type="number" min="2000" max="2025" placeholder="2021" autocomplete="off">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+          </div>
+          <div class="vfield">
+            <label for="repairCity">Repair City</label>
+            <div class="input-wrap">
+              <input id="repairCity" list="cityList" placeholder="Mumbai" autocomplete="off">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg>
+            </div>
+            <datalist id="cityList"><option value="Mumbai"><option value="Delhi"><option value="Bengaluru"><option value="Hyderabad"><option value="Chennai"><option value="Pune"><option value="Kolkata"><option value="Ahmedabad"><option value="Jaipur"><option value="Lucknow"><option value="Chandigarh"><option value="Indore"><option value="Kochi"><option value="Nagpur"><option value="Coimbatore"><option value="Surat"><option value="Bhopal"><option value="Patna"><option value="Visakhapatnam"><option value="Thiruvananthapuram"></datalist>
+          </div>
+        </div>
+        <div class="form-hint">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 11v5M12 8h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span>Leave blank to use a Compact-SUV / Tier-2 city baseline. Adding the model can shift the estimate by 10× — a Swift bumper and a Fortuner bumper are not the same bill.</span>
+        </div>
+        <div class="cta-row">
+          <button class="btn-primary" id="assessBtn" disabled>
+            <svg id="btnIcon" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span id="btnLabel">Run Assessment</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="error" id="errorBox"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span id="errorText"></span></div>
+
+  <!-- PROCESSING -->
+  <section class="processing" id="processing">
+    <div class="stages">
+      <div class="stage" data-stage="0">
+        <div class="st-ic"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 9h18M9 21V9" stroke="currentColor" stroke-width="2"/></svg></div>
+        <div class="st-name">Detecting damage</div>
+        <div class="st-status" data-status>queued</div>
+        <div class="st-bar"></div>
+      </div>
+      <div class="stage" data-stage="1">
+        <div class="st-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12h4l3 8 4-16 3 8h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="st-name">Grading severity</div>
+        <div class="st-status" data-status>queued</div>
+        <div class="st-bar"></div>
+      </div>
+      <div class="stage" data-stage="2">
+        <div class="st-ic"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 9h6v6H9z" stroke="currentColor" stroke-width="2"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+        <div class="st-name">AI surveyor review</div>
+        <div class="st-status" data-status>queued</div>
+        <div class="st-bar"></div>
+      </div>
+      <div class="stage" data-stage="3">
+        <div class="st-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="st-name">Estimating cost</div>
+        <div class="st-status" data-status>queued</div>
+        <div class="st-bar"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="results" id="results">
+
+    <div class="tl-banner reveal" id="tlBanner" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 3l9 16H3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <div><b>Total loss — likely write-off.</b> <span class="sub" id="tlSub"></span></div>
+    </div>
+
+    <div class="verdict reveal" id="verdict">
+      <div class="accent-bar" id="accentBar"></div>
+      <div class="verdict-grid">
+
+        <!-- Left: severity -->
+        <div class="verdict-main" id="verdictMain">
+          <div class="verdict-label">Vehicle-level verdict</div>
+          <div class="sev-word" id="sevWord">—</div>
+
+          <div class="stat-chips" id="statChips">
+            <div class="stat-chip">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>
+              <span class="sc-val" id="chipDamages">—</span><span class="sc-lbl">regions</span>
+            </div>
+            <div class="stat-chip" id="chipSrcWrap">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 9h6v6H9z" stroke="currentColor" stroke-width="2"/></svg>
+              <span class="sc-val" id="chipSrc">—</span>
+            </div>
+            <div class="stat-chip" id="chipConfWrap" style="display:none;">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" stroke="currentColor" stroke-width="2"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <span class="sc-val" id="chipConf">—</span><span class="sc-lbl">confidence</span>
+            </div>
+          </div>
+
+          <div class="route-pill" id="routePill">
+            <svg viewBox="0 0 24 24" fill="none" id="routeIcon" width="15" height="15"></svg>
+            <span id="routeText">—</span>
+          </div>
+        </div>
+
+        <!-- Right: cost -->
+        <div class="verdict-cost">
+          <div class="vc-top">
+            <div class="vc-label">Estimated repair cost</div>
+            <div class="vc-amount" id="vcAmount" style="display:none;"><span class="cur">₹</span><span id="vcMid">0</span></div>
+            <div class="vc-range" id="vcRange" style="display:none;"></div>
+            <div class="vc-na" id="vcNa">Estimating…</div>
+          </div>
+          <div class="vc-bottom" id="vcBottom" style="display:none;">
+            <div class="vc-divider"></div>
+            <div class="vc-meta">
+              <div class="vc-meta-item">
+                <div class="vm-label">Min estimate</div>
+                <div class="vm-val" id="vcMetaMin">—</div>
+              </div>
+              <div class="vc-meta-item">
+                <div class="vm-label">Max estimate</div>
+                <div class="vm-val" id="vcMetaMax">—</div>
+              </div>
+              <div class="vc-meta-item">
+                <div class="vm-label">Parts rate</div>
+                <div class="vm-val" id="vcMetaRate">Indian market</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="res-grid">
+      <div>
+        <div class="card reveal" id="imgCard">
+          <div class="card-head">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 16l5-5 4 4 3-3 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="9" r="1.6" fill="currentColor"/></svg></div>
+            <div><h2>Annotated Detection</h2><div class="sub" id="imgSub">—</div></div>
+          </div>
+          <img class="annot-img" id="annotImg" alt="annotated result">
+          <div class="img-foot" id="imgFoot"></div>
+        </div>
+
+        <div class="card cost-card reveal" id="costCard" style="display:none;">
+          <div class="card-head">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><h2>Repair Cost Breakdown</h2><div class="sub">AI estimate · Indian workshop rates</div></div>
+          </div>
+          <table class="cost-table">
+            <thead><tr><th>#</th><th>Component</th><th>Damage</th><th>Action</th><th>Cost (₹)</th></tr></thead>
+            <tbody id="costRows"></tbody>
+            <tfoot><tr><td colspan="4" style="text-align:right;">Total estimate</td><td class="ct-cost" id="costFootTotal">—</td></tr></tfoot>
+          </table>
+          <div class="cost-notes" id="costNotes"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card reveal" id="reasonCard">
+          <div class="card-head">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none"><path d="M9 18h6M10 21h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></div>
+            <div><h2>Why this verdict</h2><div class="sub">AI reasoning &amp; aggregation</div></div>
+          </div>
+          <div class="card-body" id="reasonBody"></div>
+        </div>
+
+        <div class="card reveal sec-gap" id="regionCard">
+          <div class="card-head">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/></svg></div>
+            <div><h2>Damage Regions</h2><div class="sub" id="regionSub">—</div></div>
+          </div>
+          <div class="card-body" id="regionBody"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
 </div>
 
 <script>
-const SEV_CLASSES = ["mild", "moderate", "severe"];
-const SEV_COLORS = { mild: "#22c55e", moderate: "#f59e0b", severe: "#ef4444" };
+const SEV = ["mild", "moderate", "severe"];
+const SEV_COLOR = { mild: "var(--mild)", moderate: "var(--moderate)", severe: "var(--severe)" };
+const SEV_FILL  = { mild: "#2dd46a", moderate: "#f5a524", severe: "#ff2433" };
 
-const uploadZone = document.getElementById("uploadZone");
-const fileInput = document.getElementById("fileInput");
-const assessBtn = document.getElementById("assessBtn");
-const fileNameEl = document.getElementById("fileName");
-const spinner = document.getElementById("spinner");
-const results = document.getElementById("results");
-const errorBox = document.getElementById("errorBox");
-
+const $ = (id) => document.getElementById(id);
 let selectedFile = null;
+let stageTimers = [];
 
-uploadZone.addEventListener("click", () => fileInput.click());
-uploadZone.addEventListener("dragover", (e) => { e.preventDefault(); uploadZone.classList.add("dragover"); });
-uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("dragover"));
-uploadZone.addEventListener("drop", (e) => {
-  e.preventDefault();
-  uploadZone.classList.remove("dragover");
-  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-});
+/* ---------- elements ---------- */
+const dropzone = $("dropzone"), fileInput = $("fileInput"), preview = $("preview");
+const assessBtn = $("assessBtn"), results = $("results"), processing = $("processing");
+const errorBox = $("errorBox"), intake = $("intake"), hero = $("hero");
+
+/* ---------- health check ---------- */
+(async () => {
+  try {
+    const r = await fetch("/health");
+    const d = await r.json();
+    if (d.models_loaded) { $("statusDot").classList.add("live"); $("statusText").textContent = "System ready"; }
+    else { $("statusText").textContent = "Loading models"; }
+  } catch { $("statusText").textContent = "Offline"; }
+})();
+
+/* ---------- file handling ---------- */
+function openPicker() { fileInput.value = ""; fileInput.click(); }
+dropzone.addEventListener("click", openPicker);
+$("changeBtn").addEventListener("click", (e) => { e.stopPropagation(); openPicker(); });
+dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("drag"); });
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
+dropzone.addEventListener("drop", (e) => { e.preventDefault(); dropzone.classList.remove("drag"); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
 fileInput.addEventListener("change", () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
 
 function handleFile(file) {
+  if (!file.type.startsWith("image/")) { showError("Please select an image file."); return; }
   selectedFile = file;
-  fileNameEl.textContent = file.name;
+  const url = URL.createObjectURL(file);
+  $("previewImg").src = url;
+  $("fileName").textContent = file.name;
+  dropzone.style.display = "none";
+  preview.classList.add("show");
   assessBtn.disabled = false;
+  hideError();
 }
 
-function titleCase(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
-function routeLabel(r) { return r.replace(/_/g, " "); }
+/* ---------- helpers ---------- */
+function fmtINR(n) { return Number(n || 0).toLocaleString("en-IN"); }
+function titleCase(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
+function routeMeta(r) {
+  if (r === "auto_classify")        return { label: "Auto-approved", cls: "bg-mild",     ico: '<path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' };
+  if (r === "suggest_human_confirm")return { label: "Confirm advised", cls: "bg-moderate", ico: '<path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>' };
+  return { label: "Manual review required", cls: "bg-severe", ico: '<path d="M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2zM9 18h6M10 21h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' };
+}
+function actClass(a) {
+  if (a === "replacement") return "act-replacement";
+  if (a === "refinishing") return "act-refinishing";
+  if ((a || "").startsWith("mechanical")) return "act-mechanical";
+  if (a === "total loss") return "act-total";
+  return "act-repair";
+}
+function showError(msg) { $("errorText").textContent = msg; errorBox.classList.add("show"); }
+function hideError() { errorBox.classList.remove("show"); }
 
+/* count-up */
+function countUp(el, target, dur = 1100, fmt = fmtINR) {
+  const start = performance.now();
+  function frame(now) {
+    const t = Math.min(1, (now - start) / dur);
+    const e = 1 - Math.pow(1 - t, 3);
+    el.textContent = fmt(Math.round(target * e));
+    if (t < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* staggered reveal — skip hidden cards so delays stay tight */
+function revealAll() {
+  let i = 0;
+  results.querySelectorAll(".reveal").forEach((el) => {
+    if (getComputedStyle(el).display === "none") return;
+    setTimeout(() => el.classList.add("in"), (i++) * 110);
+  });
+}
+
+/* ---------- processing animation ---------- */
+function startStages() {
+  const stages = [...processing.querySelectorAll(".stage")];
+  stages.forEach(s => { s.classList.remove("active", "done"); s.querySelector("[data-status]").textContent = "queued"; });
+  processing.classList.add("show");
+  stageTimers.forEach(clearTimeout); stageTimers = [];
+  const seq = [
+    { i: 0, at: 0,    dur: 600 },
+    { i: 1, at: 650,  dur: 700 },
+    { i: 2, at: 1400, dur: 1600 },
+    { i: 3, at: 1400, dur: 1600 },  // 2 & 3 run in parallel (matches backend)
+  ];
+  seq.forEach(({ i, at, dur }) => {
+    stageTimers.push(setTimeout(() => {
+      stages[i].classList.add("active");
+      stages[i].querySelector("[data-status]").textContent = "running";
+    }, at));
+    stageTimers.push(setTimeout(() => {
+      if (!stages[i].classList.contains("done")) {
+        stages[i].classList.remove("active"); stages[i].classList.add("done");
+        stages[i].querySelector("[data-status]").textContent = "done";
+      }
+    }, at + dur));
+  });
+}
+function finishStages() {
+  stageTimers.forEach(clearTimeout); stageTimers = [];
+  processing.querySelectorAll(".stage").forEach(s => {
+    s.classList.remove("active"); s.classList.add("done");
+    s.querySelector("[data-status]").textContent = "done";
+  });
+  setTimeout(() => processing.classList.remove("show"), 450);
+}
+
+/* ---------- submit ---------- */
 assessBtn.addEventListener("click", async () => {
   if (!selectedFile) return;
-  errorBox.classList.remove("visible");
-  results.classList.remove("visible");
-  spinner.classList.add("visible");
+  hideError();
+  results.classList.remove("show");
+  results.querySelectorAll(".reveal").forEach(el => el.classList.remove("in"));
   assessBtn.disabled = true;
+  $("btnIcon").outerHTML = '<div class="spin" id="btnIcon"></div>';
+  $("btnLabel").textContent = "Analysing…";
+  preview.classList.add("scanning");
+  startStages();
+
+  const params = new URLSearchParams({ include_annotated: "true" });
+  const map = { car_make: "carMake", car_model: "carModel", car_year: "carYear", city: "repairCity" };
+  for (const [k, id] of Object.entries(map)) { const v = $(id).value.trim(); if (v) params.set(k, v); }
 
   const form = new FormData();
   form.append("file", selectedFile);
 
   try {
-    const res = await fetch(`/assess?include_annotated=true`, {
-      method: "POST",
-      body: form,
-    });
+    const res = await fetch(`/assess?${params}`, { method: "POST", body: form });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(err.detail || `HTTP ${res.status}`);
     }
     const data = await res.json();
-    render(data);
+    finishStages();
+    setTimeout(() => render(data), 480);
   } catch (e) {
-    errorBox.textContent = "Error: " + e.message;
-    errorBox.classList.add("visible");
+    stageTimers.forEach(clearTimeout);
+    processing.classList.remove("show");
+    showError("Assessment failed — " + e.message);
   } finally {
-    spinner.classList.remove("visible");
+    preview.classList.remove("scanning");
     assessBtn.disabled = false;
+    const ic = $("btnIcon");
+    if (ic) ic.outerHTML = '<svg id="btnIcon" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    $("btnLabel").textContent = "Run Assessment";
+    $("newBtn").classList.add("show");
   }
 });
 
+/* ---------- new assessment ---------- */
+$("newBtn").addEventListener("click", () => {
+  results.classList.remove("show");
+  results.querySelectorAll(".reveal").forEach(el => el.classList.remove("in"));
+  $("newBtn").classList.remove("show");
+  // Reset the upload zone back to its empty state so a fresh photo can be added.
+  selectedFile = null;
+  fileInput.value = "";
+  $("previewImg").removeAttribute("src");
+  preview.classList.remove("show", "scanning");
+  dropzone.style.display = "";
+  assessBtn.disabled = true;
+  hideError();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+/* ---------- render ---------- */
 function render(data) {
-  // Annotated image
-  const img = document.getElementById("annotatedImg");
-  if (data.annotated_image_b64) {
-    img.src = "data:image/jpeg;base64," + data.annotated_image_b64;
-    img.style.display = "block";
+  const sev = data.overall_severity || "unknown";
+  const sevColor = SEV_COLOR[sev] || "var(--muted)";
+
+  /* ── verdict card ── */
+  $("accentBar").style.background = sevColor;
+
+  // Background glow tinted to severity
+  const glowMap = { mild: "rgba(45,212,106,0.08)", moderate: "rgba(245,165,36,0.08)", severe: "rgba(255,36,51,0.09)" };
+  $("verdictMain").style.setProperty("--v-glow", glowMap[sev] || "transparent");
+
+  // Severity word
+  $("sevWord").textContent = sev.toUpperCase();
+  $("sevWord").style.color = sevColor;
+
+  // Severity meter — highlight the correct segment
+  ["meterMild","meterMod","meterSev"].forEach(id => $( id).classList.remove("active"));
+  if (sev === "mild") $("meterMild").classList.add("active");
+  else if (sev === "moderate") $("meterMod").classList.add("active");
+  else if (sev === "severe") $("meterSev").classList.add("active");
+
+  // Stat chips
+  $("chipDamages").textContent = data.num_damages;
+  if (data.severity_source === "vlm") {
+    $("chipSrc").textContent = "AI Verified";
+    $("chipSrc").style.color = "var(--mild)";
   } else {
-    img.style.display = "none";
+    $("chipSrc").textContent = "CV Pipeline";
+    $("chipSrc").style.color = "var(--text)";
+  }
+  if (data.vlm_assessment) {
+    const conf = Math.round((data.vlm_assessment.confidence || 0) * 100);
+    $("chipConf").textContent = conf + "%";
+    $("chipConfWrap").style.display = "flex";
+  } else {
+    $("chipConfWrap").style.display = "none";
   }
 
-  document.getElementById("numDamages").textContent = data.num_damages;
-  document.getElementById("overallSeverity").innerHTML =
-    `<span class="badge sev-${data.overall_severity}">${data.overall_severity}</span>`;
-  document.getElementById("overallRouting").innerHTML =
-    `<span class="badge route-${data.overall_routing}">${routeLabel(data.overall_routing)}</span>`;
+  // Routing pill
+  const rm = routeMeta(data.overall_routing);
+  const rp = $("routePill");
+  rp.className = "route-pill " + rm.cls;
+  rp.innerHTML = `<svg viewBox="0 0 24 24" fill="none" width="15" height="15">${rm.ico}</svg><span>${rm.label}</span>`;
 
-  const reasonBox = document.getElementById("reasonBox");
+  /* total loss banner */
+  const tl = $("tlBanner");
+  if (data.vlm_assessment && data.vlm_assessment.is_total_loss) {
+    tl.style.display = "flex";
+    $("tlSub").textContent = data.cost_estimate
+      ? "Figure below reflects estimated salvage value."
+      : "Recommend full structural inspection.";
+  } else { tl.style.display = "none"; }
+
+  /* cost section */
+  const vcAmount = $("vcAmount"), vcRange = $("vcRange"), vcNa = $("vcNa");
+  if (data.cost_estimate && data.cost_estimate.items && data.cost_estimate.items.length) {
+    const ce = data.cost_estimate;
+    const mid = Math.round((ce.total_min_inr + ce.total_max_inr) / 2);
+    vcNa.style.display = "none";
+    vcAmount.style.display = "block";
+    vcRange.style.display = "block";
+    vcRange.textContent = `₹${fmtINR(ce.total_min_inr)} – ₹${fmtINR(ce.total_max_inr)}`;
+    setTimeout(() => countUp($("vcMid"), mid), 500);
+    // Meta grid
+    $("vcMetaMin").textContent = "₹" + fmtINR(ce.total_min_inr);
+    $("vcMetaMax").textContent = "₹" + fmtINR(ce.total_max_inr);
+    $("vcMetaModel").textContent = ce.model || "gpt-4o-mini";
+    $("vcBottom").style.display = "block";
+  } else {
+    vcAmount.style.display = "none"; vcRange.style.display = "none";
+    vcNa.style.display = "block"; vcNa.textContent = "Cost estimate unavailable";
+    $("vcBottom").style.display = "none";
+  }
+
+  /* annotated image */
+  if (data.annotated_image_b64) { $("annotImg").src = "data:image/jpeg;base64," + data.annotated_image_b64; $("annotImg").style.display = "block"; }
+  else $("annotImg").style.display = "none";
+  $("imgSub").textContent = `${data.num_damages} region${data.num_damages === 1 ? "" : "s"} · conf-coded boxes`;
+  $("imgFoot").innerHTML = [
+    ["Detect", data.detection_time_ms],
+    ["Severity", data.severity_time_ms],
+    ["AI", data.vlm_time_ms],
+    ["Total", data.total_time_ms],
+  ].map(([k, v]) => `<span>${k} <b>${Math.round(v)}ms</b></span>`).join("")
+   + `<span style="margin-left:auto;">${data.stage1_model} + ${data.stage2_model}</span>`;
+
+  /* reasoning */
+  const rb = $("reasonBody");
   let html = "";
-  let escalated = false;
-
   if (data.vlm_assessment) {
     const v = data.vlm_assessment;
-    const tl = v.is_total_loss ? " · ⚠️ TOTAL-LOSS" : "";
-    const src = data.severity_source === "vlm" ? " (drove the verdict)" : "";
-    html += `<div class="reason-block"><span class="reason-tag">🧠 Whole-image AI assessment${src}</span>`
-         +  `<strong>${v.severity.toUpperCase()}</strong> · ${(v.confidence*100).toFixed(0)}% confident${tl}<br>${v.reasoning}</div>`;
+    const drove = data.severity_source === "vlm" ? "Drove the verdict" : "Secondary signal";
+    html += `<div class="reason-block">
+      <div class="rb-head"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 9h6v6H9z" stroke="currentColor" stroke-width="2"/></svg>AI Surveyor · ${drove}</div>
+      <div class="rb-verdict c-${v.severity}">${v.severity.toUpperCase()} · ${Math.round(v.confidence*100)}% confident${v.is_total_loss ? " · TOTAL LOSS" : ""}</div>
+      <div class="rb-text">${v.reasoning || ""}</div></div>`;
   }
   if (data.aggregation) {
-    const a = data.aggregation;
-    escalated = a.escalated;
-    html += `<div class="reason-block"><span class="reason-tag">🔍 Per-damage breakdown</span>${a.reason}</div>`;
+    html += `<div class="reason-block">
+      <div class="rb-head"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>CV Aggregation</div>
+      <div class="rb-text">${data.aggregation.reason || ""}</div></div>`;
   }
+  rb.innerHTML = html || `<div class="empty-note">No reasoning available.</div>`;
 
-  if (html) {
-    reasonBox.className = "reason" + ((escalated || (data.vlm_assessment && data.vlm_assessment.is_total_loss)) ? " escalated" : "");
-    reasonBox.innerHTML = html;
-    reasonBox.style.display = "block";
-  } else {
-    reasonBox.style.display = "none";
-  }
-
-  const vlmMs = data.vlm_time_ms ? ` · AI ${data.vlm_time_ms.toFixed(0)}ms` : "";
-  document.getElementById("timing").textContent =
-    `Detection ${data.detection_time_ms.toFixed(0)}ms · Severity ${data.severity_time_ms.toFixed(0)}ms${vlmMs} · Total ${data.total_time_ms.toFixed(0)}ms · ${data.stage1_model} + ${data.stage2_model}`;
-
-  const regionsEl = document.getElementById("regions");
-  regionsEl.innerHTML = "";
-
+  /* regions */
+  const regBody = $("regionBody");
+  $("regionSub").textContent = data.regions.length + " detected";
   if (!data.regions.length) {
-    regionsEl.innerHTML = '<div class="empty">No damage detected. Try lowering the detection threshold.</div>';
+    regBody.innerHTML = `<div class="empty-note">No damage regions detected.</div>`;
+  } else {
+    regBody.innerHTML = data.regions.map((r, i) => {
+      const s = r.severity;
+      if (!s) return `<div class="region"><div class="region-head"><div class="region-id"><div class="rnum">${i+1}</div><div><div class="rname">${r.class_name}</div><div class="rconf">no crop</div></div></div><span class="chip bg-unknown">unknown</span></div></div>`;
+      const bars = SEV.map(c => {
+        const p = Math.round((s.probabilities[c] || 0) * 100);
+        return `<div class="prob-row"><span class="pl">${c}</span><div class="prob-track"><div class="prob-fill" data-w="${p}" style="background:${SEV_FILL[c]}"></div></div><span class="prob-pct">${p}%</span></div>`;
+      }).join("");
+      return `<div class="region">
+        <div class="region-head">
+          <div class="region-id"><div class="rnum">${i+1}</div><div><div class="rname">${r.class_name}</div><div class="rconf">det ${Math.round(r.detection_confidence*100)}%</div></div></div>
+          <span class="chip bg-${s.severity}">${s.severity}</span>
+        </div>${bars}</div>`;
+    }).join("");
   }
 
-  data.regions.forEach((r, i) => {
-    const sev = r.severity;
-    const div = document.createElement("div");
-    div.className = "region";
+  /* cost table */
+  const costCard = $("costCard");
+  if (data.cost_estimate && data.cost_estimate.items && data.cost_estimate.items.length) {
+    const ce = data.cost_estimate;
+    costCard.style.display = "block";
+    $("costRows").innerHTML = ce.items.map((it, idx) => {
+      const range = it.cost_min_inr === it.cost_max_inr ? `₹${fmtINR(it.cost_min_inr)}` : `₹${fmtINR(it.cost_min_inr)} – ₹${fmtINR(it.cost_max_inr)}`;
+      return `<tr>
+        <td class="ct-num">${idx+1}</td>
+        <td class="ct-comp">${it.component}</td>
+        <td class="ct-dmg">${it.damage_type}</td>
+        <td><span class="act-badge ${actClass(it.repair_action)}">${it.repair_action}</span></td>
+        <td class="ct-cost">${range}</td></tr>`;
+    }).join("");
+    $("costFootTotal").textContent = ce.total_min_inr === ce.total_max_inr ? `₹${fmtINR(ce.total_min_inr)}` : `₹${fmtINR(ce.total_min_inr)} – ₹${fmtINR(ce.total_max_inr)}`;
+    $("costNotes").innerHTML = `<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 11v5M12 8h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>${ce.notes || "Estimates based on Indian workshop rates. Confirm with a professional quote before repairs."}</span>`;
+  } else { costCard.style.display = "none"; }
 
-    let badges = "";
-    let probBars = "";
-    if (sev) {
-      badges = `
-        <span class="badge sev-${sev.severity}">${sev.severity}</span>
-        <span class="badge route-${sev.routing}">${routeLabel(sev.routing)}</span>`;
-      probBars = '<div class="prob-bars">' + SEV_CLASSES.map(c => {
-        const p = (sev.probabilities[c] || 0) * 100;
-        return `<div class="prob-bar">
-          <span class="plabel">${c}</span>
-          <div class="prob-track"><div class="prob-fill" style="width:${p}%;background:${SEV_COLORS[c]}"></div></div>
-          <span class="prob-pct">${p.toFixed(0)}%</span>
-        </div>`;
-      }).join("") + '</div>';
-    } else {
-      badges = '<span class="badge sev-unknown">no crop</span>';
-    }
-
-    div.innerHTML = `
-      <div class="region-head">
-        <span class="region-title">#${i + 1} · ${r.class_name}</span>
-        <div class="badges">${badges}</div>
-      </div>
-      <div style="font-size:0.78rem;color:var(--muted);">
-        Detection conf: ${(r.detection_confidence * 100).toFixed(0)}%
-      </div>
-      ${probBars}`;
-    regionsEl.appendChild(div);
-  });
-
-  results.classList.add("visible");
+  /* show + reveal */
+  results.classList.add("show");
+  results.scrollIntoView({ behavior: "smooth", block: "start" });
+  setTimeout(() => {
+    revealAll();
+    // animate probability bars after reveal
+    setTimeout(() => results.querySelectorAll(".prob-fill").forEach(f => f.style.width = f.dataset.w + "%"), 300);
+  }, 60);
 }
 </script>
 </body>

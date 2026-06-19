@@ -34,7 +34,8 @@ sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "stage1_detection"))
 
 from pipeline import (
-    Aggregation, PipelineResult, RegionResult, SeverityAssessment, VLMSeverity, run_image,
+    Aggregation, CostEstimateItem, PipelineResult, RegionResult,
+    RepairCostBreakdown, SeverityAssessment, VLMSeverity, run_image,
 )
 from stage2_severity.infer import load_model as _load_severity
 
@@ -61,10 +62,12 @@ class AssessmentResponse(BaseModel):
     severity_source: str  = Field(..., description="vlm | crop_heuristic")
     aggregation: Aggregation
     vlm_assessment: VLMSeverity | None = None
+    cost_estimate: RepairCostBreakdown | None = None
     regions: list[RegionResult]
     detection_time_ms: float
     severity_time_ms: float
     vlm_time_ms: float
+    cost_time_ms: float = 0.0
     total_time_ms: float
     stage1_model: str
     stage2_model: str
@@ -88,10 +91,12 @@ class AssessmentResponse(BaseModel):
             severity_source=result.severity_source,
             aggregation=result.aggregation,
             vlm_assessment=result.vlm_assessment,
+            cost_estimate=result.cost_estimate,
             regions=result.regions,
             detection_time_ms=result.detection_time_ms,
             severity_time_ms=result.severity_time_ms,
             vlm_time_ms=result.vlm_time_ms,
+            cost_time_ms=result.cost_time_ms,
             total_time_ms=result.total_time_ms,
             stage1_model=result.stage1_model,
             stage2_model=result.stage2_model,
@@ -213,10 +218,12 @@ def routing_guide():
 @app.post("/assess", response_model=AssessmentResponse, tags=["assessment"])
 async def assess(
     file: UploadFile = File(..., description="Vehicle damage photo (JPEG / PNG / WEBP)"),
-    include_annotated: bool = Query(
-        default=False,
-        description="Include base64-encoded annotated image in the response"
-    ),
+    include_annotated: bool = Query(default=False,
+        description="Include base64-encoded annotated image in the response"),
+    car_make: str  = Query(default="", description="Vehicle make, e.g. Maruti Suzuki"),
+    car_model: str = Query(default="", description="Vehicle model, e.g. Swift"),
+    car_year: Optional[int] = Query(default=None, description="Vehicle manufacturing year, e.g. 2021"),
+    city: str      = Query(default="", description="City where repairs will be done, e.g. Mumbai"),
 ):
     """
     Assess vehicle damage from an uploaded photo.
@@ -259,6 +266,10 @@ async def assess(
                 device=_models["device"],
                 out_dir=Path(tmpdir) / "out",
                 annotate=include_annotated,
+                car_make=car_make,
+                car_model=car_model,
+                car_year=car_year,
+                city=city,
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Pipeline error: {e}")
