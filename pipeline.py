@@ -224,6 +224,11 @@ _openai_client = None
 _openai_checked = False
 
 
+def _sanitize_input(value: str, max_len: int = 80) -> str:
+    """Strip newlines and truncate user-supplied text before it enters an LLM prompt."""
+    return value.replace("\n", " ").replace("\r", " ").strip()[:max_len]
+
+
 def _get_openai_client():
     """Lazily build a cached OpenAI client, or None if unavailable."""
     global _openai_client, _openai_checked
@@ -255,15 +260,17 @@ def assess_whole_image_vlm(image_path: Path) -> VLMSeverity | None:
     if client is None:
         return None
     try:
-        import base64
-        b64 = base64.b64encode(Path(image_path).read_bytes()).decode("utf-8")
+        import base64, mimetypes
+        img_bytes = Path(image_path).read_bytes()
+        b64 = base64.b64encode(img_bytes).decode("utf-8")
+        mime = mimetypes.guess_type(str(image_path))[0] or "image/jpeg"
         resp = client.chat.completions.create(
             model=VLM_SEVERITY_MODEL,
             messages=[{
                 "role": "user",
                 "content": [
                     {"type": "image_url",
-                     "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "low"}},
+                     "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "low"}},
                     {"type": "text", "text": VLM_SEVERITY_PROMPT},
                 ],
             }],
@@ -323,7 +330,7 @@ def estimate_repair_cost(
     if client is None:
         return None
     try:
-        import base64
+        import base64, mimetypes
         # Build region list with spatial context from each bounding box.
         lines = []
         for i, r in enumerate(regions, 1):
@@ -344,18 +351,23 @@ def estimate_repair_cost(
         else:
             surveyor_verdict = "  (no whole-vehicle verdict available — judge from the photo)"
 
+        # Sanitize user-supplied strings before they enter the LLM prompt.
+        safe_make  = _sanitize_input(car_make)
+        safe_model = _sanitize_input(car_model)
+        safe_city  = _sanitize_input(city)
+
         # Build vehicle info
-        parts = [car_make, car_model]
+        parts = [safe_make, safe_model]
         if car_year:
             parts.append(f"({car_year})")
         vehicle_info = " ".join(p for p in parts if p).strip() or \
             "Unknown — defaulting to Compact SUV segment for pricing"
 
         # Build location / labour tier info
-        location_info = city.strip() or "Unknown — defaulting to Tier-2 city labour rates"
+        location_info = safe_city or "Unknown — defaulting to Tier-2 city labour rates"
 
         # Note when vehicle details are absent
-        if not (car_make or car_model):
+        if not (safe_make or safe_model):
             unknown_vehicle_note = (
                 "\nNOTE: No vehicle details provided. Compact SUV segment prices used as "
                 "default. Actual cost may differ significantly for budget or luxury vehicles."
@@ -374,13 +386,14 @@ def estimate_repair_cost(
         # detail="high" — the model needs to actually see crush extent to itemise
         # the parts behind a damaged panel; "low" downsamples too far for that.
         b64 = base64.b64encode(Path(image_path).read_bytes()).decode("utf-8")
+        mime = mimetypes.guess_type(str(image_path))[0] or "image/jpeg"
         resp = client.chat.completions.create(
             model=VLM_COST_MODEL,
             messages=[{
                 "role": "user",
                 "content": [
                     {"type": "image_url",
-                     "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}},
+                     "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "high"}},
                     {"type": "text", "text": prompt},
                 ],
             }],

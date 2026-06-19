@@ -662,6 +662,16 @@ const $ = (id) => document.getElementById(id);
 let selectedFile = null;
 let stageTimers = [];
 
+/* HTML-escape any server/LLM string before inserting into innerHTML */
+function esc(s) {
+  if (s == null) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+/* Constrain severity to known values so it's safe to use as a CSS class suffix */
+function safeSev(sev) { return ['mild','moderate','severe'].includes(sev) ? sev : 'unknown'; }
+
 /* ---------- elements ---------- */
 const dropzone = $("dropzone"), fileInput = $("fileInput"), preview = $("preview");
 const assessBtn = $("assessBtn"), results = $("results"), processing = $("processing");
@@ -845,12 +855,6 @@ function render(data) {
   $("sevWord").textContent = sev.toUpperCase();
   $("sevWord").style.color = sevColor;
 
-  // Severity meter — highlight the correct segment
-  ["meterMild","meterMod","meterSev"].forEach(id => $( id).classList.remove("active"));
-  if (sev === "mild") $("meterMild").classList.add("active");
-  else if (sev === "moderate") $("meterMod").classList.add("active");
-  else if (sev === "severe") $("meterSev").classList.add("active");
-
   // Stat chips
   $("chipDamages").textContent = data.num_damages;
   if (data.severity_source === "vlm") {
@@ -896,7 +900,6 @@ function render(data) {
     // Meta grid
     $("vcMetaMin").textContent = "₹" + fmtINR(ce.total_min_inr);
     $("vcMetaMax").textContent = "₹" + fmtINR(ce.total_max_inr);
-    $("vcMetaModel").textContent = ce.model || "gpt-4o-mini";
     $("vcBottom").style.display = "block";
   } else {
     vcAmount.style.display = "none"; vcRange.style.display = "none";
@@ -914,7 +917,7 @@ function render(data) {
     ["AI", data.vlm_time_ms],
     ["Total", data.total_time_ms],
   ].map(([k, v]) => `<span>${k} <b>${Math.round(v)}ms</b></span>`).join("")
-   + `<span style="margin-left:auto;">${data.stage1_model} + ${data.stage2_model}</span>`;
+   + `<span style="margin-left:auto;">${esc(data.stage1_model)} + ${esc(data.stage2_model)}</span>`;
 
   /* reasoning */
   const rb = $("reasonBody");
@@ -922,15 +925,16 @@ function render(data) {
   if (data.vlm_assessment) {
     const v = data.vlm_assessment;
     const drove = data.severity_source === "vlm" ? "Drove the verdict" : "Secondary signal";
+    const sc = safeSev(v.severity);
     html += `<div class="reason-block">
       <div class="rb-head"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 9h6v6H9z" stroke="currentColor" stroke-width="2"/></svg>AI Surveyor · ${drove}</div>
-      <div class="rb-verdict c-${v.severity}">${v.severity.toUpperCase()} · ${Math.round(v.confidence*100)}% confident${v.is_total_loss ? " · TOTAL LOSS" : ""}</div>
-      <div class="rb-text">${v.reasoning || ""}</div></div>`;
+      <div class="rb-verdict c-${sc}">${esc(v.severity).toUpperCase()} · ${Math.round(v.confidence*100)}% confident${v.is_total_loss ? " · TOTAL LOSS" : ""}</div>
+      <div class="rb-text">${esc(v.reasoning)}</div></div>`;
   }
   if (data.aggregation) {
     html += `<div class="reason-block">
       <div class="rb-head"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>CV Aggregation</div>
-      <div class="rb-text">${data.aggregation.reason || ""}</div></div>`;
+      <div class="rb-text">${esc(data.aggregation.reason)}</div></div>`;
   }
   rb.innerHTML = html || `<div class="empty-note">No reasoning available.</div>`;
 
@@ -942,15 +946,16 @@ function render(data) {
   } else {
     regBody.innerHTML = data.regions.map((r, i) => {
       const s = r.severity;
-      if (!s) return `<div class="region"><div class="region-head"><div class="region-id"><div class="rnum">${i+1}</div><div><div class="rname">${r.class_name}</div><div class="rconf">no crop</div></div></div><span class="chip bg-unknown">unknown</span></div></div>`;
+      if (!s) return `<div class="region"><div class="region-head"><div class="region-id"><div class="rnum">${i+1}</div><div><div class="rname">${esc(r.class_name)}</div><div class="rconf">no crop</div></div></div><span class="chip bg-unknown">unknown</span></div></div>`;
+      const sc = safeSev(s.severity);
       const bars = SEV.map(c => {
         const p = Math.round((s.probabilities[c] || 0) * 100);
         return `<div class="prob-row"><span class="pl">${c}</span><div class="prob-track"><div class="prob-fill" data-w="${p}" style="background:${SEV_FILL[c]}"></div></div><span class="prob-pct">${p}%</span></div>`;
       }).join("");
       return `<div class="region">
         <div class="region-head">
-          <div class="region-id"><div class="rnum">${i+1}</div><div><div class="rname">${r.class_name}</div><div class="rconf">det ${Math.round(r.detection_confidence*100)}%</div></div></div>
-          <span class="chip bg-${s.severity}">${s.severity}</span>
+          <div class="region-id"><div class="rnum">${i+1}</div><div><div class="rname">${esc(r.class_name)}</div><div class="rconf">det ${Math.round(r.detection_confidence*100)}%</div></div></div>
+          <span class="chip bg-${sc}">${esc(s.severity)}</span>
         </div>${bars}</div>`;
     }).join("");
   }
@@ -964,13 +969,13 @@ function render(data) {
       const range = it.cost_min_inr === it.cost_max_inr ? `₹${fmtINR(it.cost_min_inr)}` : `₹${fmtINR(it.cost_min_inr)} – ₹${fmtINR(it.cost_max_inr)}`;
       return `<tr>
         <td class="ct-num">${idx+1}</td>
-        <td class="ct-comp">${it.component}</td>
-        <td class="ct-dmg">${it.damage_type}</td>
-        <td><span class="act-badge ${actClass(it.repair_action)}">${it.repair_action}</span></td>
+        <td class="ct-comp">${esc(it.component)}</td>
+        <td class="ct-dmg">${esc(it.damage_type)}</td>
+        <td><span class="act-badge ${actClass(it.repair_action)}">${esc(it.repair_action)}</span></td>
         <td class="ct-cost">${range}</td></tr>`;
     }).join("");
     $("costFootTotal").textContent = ce.total_min_inr === ce.total_max_inr ? `₹${fmtINR(ce.total_min_inr)}` : `₹${fmtINR(ce.total_min_inr)} – ₹${fmtINR(ce.total_max_inr)}`;
-    $("costNotes").innerHTML = `<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 11v5M12 8h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>${ce.notes || "Estimates based on Indian workshop rates. Confirm with a professional quote before repairs."}</span>`;
+    $("costNotes").innerHTML = `<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 11v5M12 8h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>${esc(ce.notes) || "Estimates based on Indian workshop rates. Confirm with a professional quote before repairs."}</span>`;
   } else { costCard.style.display = "none"; }
 
   /* show + reveal */

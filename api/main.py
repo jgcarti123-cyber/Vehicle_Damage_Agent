@@ -17,16 +17,21 @@ Run:
 from __future__ import annotations
 
 import base64
+import logging
 import sys
 import tempfile
+import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
 import torch
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 # Ensure project root is importable.
 _ROOT = Path(__file__).parent.parent
@@ -48,6 +53,42 @@ STAGE2_WEIGHTS = _ROOT / "runs/severity/efficientnet-b0-v6/weights/best.pt"
 ALLOWED_TYPES  = {"image/jpeg", "image/png", "image/webp", "image/bmp"}
 MAX_FILE_MB    = 20
 STATIC_DIR     = Path(__file__).parent / "static"
+
+# Magic-byte signatures for accepted image formats.
+_MAGIC: list[tuple[bytes, bytes | None]] = [
+    (b"\xff\xd8\xff", None),          # JPEG
+    (b"\x89PNG",      None),          # PNG
+    (b"RIFF",         b"WEBP"),       # WEBP  (bytes 0-3 = RIFF, bytes 8-11 = WEBP)
+    (b"BM",           None),          # BMP
+]
+
+# Simple in-memory rate limiter: max 10 /assess requests per IP per minute.
+_rate_window  = 60.0
+_rate_limit   = 10
+_rate_buckets: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_magic(data: bytes) -> bool:
+    for prefix, extra in _MAGIC:
+        if data[:len(prefix)] == prefix:
+            if extra is None:
+                return True
+            if data[8 : 8 + len(extra)] == extra:
+                return True
+    return False
+
+
+def _enforce_rate_limit(client_ip: str) -> None:
+    now   = time.monotonic()
+    times = _rate_buckets[client_ip]
+    times[:] = [t for t in times if now - t < _rate_window]
+    if len(times) >= _rate_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded — maximum {_rate_limit} requests per minute.",
+        )
+    times.append(now)
+
 
 # ---------------------------------------------------------------------------
 # Response schemas
@@ -157,6 +198,23 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src https://fonts.gstatic.com; "
+        "img-src 'self' data: blob:; "
+        "script-src 'self' 'unsafe-inline'; "
+        "connect-src 'self'"
+    )
+    return response
+
+
 # ---------------------------------------------------------------------------
 # Frontend
 # ---------------------------------------------------------------------------
@@ -217,13 +275,14 @@ def routing_guide():
 
 @app.post("/assess", response_model=AssessmentResponse, tags=["assessment"])
 async def assess(
+    request: Request,
     file: UploadFile = File(..., description="Vehicle damage photo (JPEG / PNG / WEBP)"),
     include_annotated: bool = Query(default=False,
         description="Include base64-encoded annotated image in the response"),
-    car_make: str  = Query(default="", description="Vehicle make, e.g. Maruti Suzuki"),
-    car_model: str = Query(default="", description="Vehicle model, e.g. Swift"),
+    car_make: str  = Query(default="", max_length=80, description="Vehicle make, e.g. Maruti Suzuki"),
+    car_model: str = Query(default="", max_length=80, description="Vehicle model, e.g. Swift"),
     car_year: Optional[int] = Query(default=None, description="Vehicle manufacturing year, e.g. 2021"),
-    city: str      = Query(default="", description="City where repairs will be done, e.g. Mumbai"),
+    city: str      = Query(default="", max_length=80, description="City where repairs will be done, e.g. Mumbai"),
 ):
     """
     Assess vehicle damage from an uploaded photo.
@@ -233,10 +292,13 @@ async def assess(
     - Overall severity and routing for the whole image
     - Optionally a base64-encoded annotated image with colored bounding boxes
     """
+    client_ip = request.client.host if request.client else "unknown"
+    _enforce_rate_limit(client_ip)
+
     if not _models:
         raise HTTPException(status_code=503, detail="Models not loaded yet. Retry in a moment.")
 
-    # Validate file type
+    # Validate Content-Type header (client-controlled — magic bytes checked below)
     content_type = file.content_type or ""
     if content_type not in ALLOWED_TYPES:
         raise HTTPException(
@@ -251,6 +313,10 @@ async def assess(
             status_code=413,
             detail=f"File too large. Maximum size is {MAX_FILE_MB} MB."
         )
+
+    # Verify actual file content via magic bytes (Content-Type is client-controlled)
+    if not _check_magic(data):
+        raise HTTPException(status_code=400, detail="File content does not match a supported image format.")
 
     # Write to temp dir, run pipeline, read annotated output
     suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
@@ -272,7 +338,8 @@ async def assess(
                 city=city,
             )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Pipeline error: {e}")
+            logger.error("Pipeline error for %s: %s", client_ip, e)
+            raise HTTPException(status_code=500, detail="Assessment failed. Please try again.")
 
         annotated_b64 = None
         if include_annotated:
