@@ -69,10 +69,15 @@ ROUTING_ORDER = ["auto_classify", "suggest_human_confirm", "human_review"]
 # Image-level severity aggregation
 #
 # The per-crop classifier only sees one region at a time — it cannot tell that
-# a "moderate" crop is one of seven damages on a destroyed front-end. Insurers
+# a "moderate" crop is one of several damages on a destroyed front-end. Insurers
 # assess severity at the VEHICLE level: repair costs accumulate across damaged
-# components. We mirror that with a damage-score + area-coverage heuristic that
-# escalates the overall severity beyond the worst individual crop.
+# components. We mirror that with a damage-score that sums per-component severity.
+#
+# IMPORTANT — escalating to SEVERE requires actual evidence of severity (a severe
+# crop, or enough moderate+ damage to cross the score threshold). Area coverage is
+# NOT used to reach severe: it depends on how zoomed-in the photo is (a close-up of
+# one small scratch can fill the frame), so a pile of purely cosmetic damage must
+# never read as severe. Coverage may only nudge mild -> moderate.
 # ---------------------------------------------------------------------------
 
 # Points roughly proportional to repair cost per damaged component.
@@ -80,11 +85,10 @@ SEVERITY_POINTS = {"mild": 1, "moderate": 3, "severe": 8}
 
 # Total damage score thresholds (sum of per-region points).
 SCORE_SEVERE   = 12   # e.g. 4 moderate components, or 1 severe + extras
-SCORE_MODERATE = 5    # e.g. 2 moderate, or 1 moderate + a few mild
+SCORE_MODERATE = 5    # e.g. 2 moderate, or several mild adding up
 
-# Fraction of the image covered by damage boxes (union) that forces escalation.
-COVERAGE_SEVERE   = 0.40
-COVERAGE_MODERATE = 0.20
+# Coverage can bump mild -> moderate only (never severe — see note above).
+COVERAGE_MODERATE = 0.35
 
 
 # ---------------------------------------------------------------------------
@@ -193,9 +197,12 @@ def aggregate_severity(regions: list["RegionResult"], image_w: int, image_h: int
     coverage = _union_coverage(scored, image_w, image_h)
     worst  = worst_severity(sevs)
 
-    # Determine aggregate severity from the strongest of three signals.
-    if counts.get("severe", 0) >= 1 or score >= SCORE_SEVERE or coverage >= COVERAGE_SEVERE:
+    # SEVERE requires real severity evidence — a severe crop or enough accumulated
+    # moderate+ damage. Coverage is deliberately NOT a path to severe (framing-dependent).
+    if counts.get("severe", 0) >= 1 or score >= SCORE_SEVERE:
         overall = "severe"
+    # MODERATE from a moderate crop, accumulated score, or a large affected area
+    # (a fully scuffed panel costs more to repaint — but caps at moderate).
     elif counts.get("moderate", 0) >= 1 or score >= SCORE_MODERATE or coverage >= COVERAGE_MODERATE:
         overall = "moderate"
     else:
