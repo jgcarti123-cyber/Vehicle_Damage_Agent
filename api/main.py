@@ -33,7 +33,7 @@ _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "stage1_detection"))
 
-from pipeline import PipelineResult, RegionResult, SeverityAssessment, run_image
+from pipeline import Aggregation, PipelineResult, RegionResult, SeverityAssessment, run_image
 from stage2_severity.infer import load_model as _load_severity
 
 # ---------------------------------------------------------------------------
@@ -56,6 +56,7 @@ class AssessmentResponse(BaseModel):
     num_damages: int
     overall_severity: str = Field(..., description="mild | moderate | severe | unknown")
     overall_routing: str  = Field(..., description="auto_classify | suggest_human_confirm | human_review")
+    aggregation: Aggregation
     regions: list[RegionResult]
     detection_time_ms: float
     severity_time_ms: float
@@ -79,6 +80,7 @@ class AssessmentResponse(BaseModel):
             num_damages=result.num_damages,
             overall_severity=result.overall_severity,
             overall_routing=result.overall_routing,
+            aggregation=result.aggregation,
             regions=result.regions,
             detection_time_ms=result.detection_time_ms,
             severity_time_ms=result.severity_time_ms,

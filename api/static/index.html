@@ -150,6 +150,26 @@
   .prob-fill { height: 100%; border-radius: 3px; }
   .prob-pct { width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
 
+  .reason {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: #141a22;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--text);
+    line-height: 1.45;
+  }
+  .reason.escalated { border-left-color: var(--severe); }
+  .reason .reason-tag {
+    display: block;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
   .timing { color: var(--muted); font-size: 0.8rem; margin-top: 12px; }
   .spinner {
     display: none;
@@ -221,6 +241,7 @@
           <span class="key">Overall routing</span>
           <span id="overallRouting">—</span>
         </div>
+        <div class="reason" id="reasonBox"></div>
         <h2 style="margin-top:18px;">Damage Regions</h2>
         <div id="regions"></div>
       </div>
@@ -310,6 +331,17 @@ function render(data) {
     `<span class="badge sev-${data.overall_severity}">${data.overall_severity}</span>`;
   document.getElementById("overallRouting").innerHTML =
     `<span class="badge route-${data.overall_routing}">${routeLabel(data.overall_routing)}</span>`;
+
+  const reasonBox = document.getElementById("reasonBox");
+  if (data.aggregation) {
+    const a = data.aggregation;
+    reasonBox.className = "reason" + (a.escalated ? " escalated" : "");
+    const tag = a.escalated ? "⚠️ Severity escalated (vehicle-level)" : "Vehicle-level assessment";
+    reasonBox.innerHTML = `<span class="reason-tag">${tag}</span>${a.reason}`;
+    reasonBox.style.display = "block";
+  } else {
+    reasonBox.style.display = "none";
+  }
 
   document.getElementById("timing").textContent =
     `Detection ${data.detection_time_ms.toFixed(0)}ms · Severity ${data.severity_time_ms.toFixed(0)}ms · Total ${data.total_time_ms.toFixed(0)}ms · ${data.stage1_model} + ${data.stage2_model}`;

@@ -23,6 +23,7 @@ import argparse
 import json
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 # Ensure project root is on the path for stage1/stage2 imports.
@@ -64,6 +65,27 @@ ROUTING_THRESHOLDS = [
 
 ROUTING_ORDER = ["auto_classify", "suggest_human_confirm", "human_review"]
 
+# ---------------------------------------------------------------------------
+# Image-level severity aggregation
+#
+# The per-crop classifier only sees one region at a time — it cannot tell that
+# a "moderate" crop is one of seven damages on a destroyed front-end. Insurers
+# assess severity at the VEHICLE level: repair costs accumulate across damaged
+# components. We mirror that with a damage-score + area-coverage heuristic that
+# escalates the overall severity beyond the worst individual crop.
+# ---------------------------------------------------------------------------
+
+# Points roughly proportional to repair cost per damaged component.
+SEVERITY_POINTS = {"mild": 1, "moderate": 3, "severe": 8}
+
+# Total damage score thresholds (sum of per-region points).
+SCORE_SEVERE   = 12   # e.g. 4 moderate components, or 1 severe + extras
+SCORE_MODERATE = 5    # e.g. 2 moderate, or 1 moderate + a few mild
+
+# Fraction of the image covered by damage boxes (union) that forces escalation.
+COVERAGE_SEVERE   = 0.40
+COVERAGE_MODERATE = 0.20
+
 
 # ---------------------------------------------------------------------------
 # Schemas
@@ -85,14 +107,26 @@ class RegionResult(BaseModel):
     severity: SeverityAssessment | None = None
 
 
+class Aggregation(BaseModel):
+    """Image-level severity reasoning — how per-crop results roll up to the car."""
+    overall: str = Field(..., description="Vehicle-level severity: mild | moderate | severe | unknown")
+    damage_score: int = Field(..., description="Sum of per-region severity points")
+    coverage: float = Field(..., description="Fraction of image area covered by damage (union)")
+    counts: dict[str, int] = Field(..., description="Per-severity region counts")
+    worst_individual: str = Field(..., description="Worst single-crop severity")
+    escalated: bool = Field(..., description="True if aggregate severity exceeds worst individual crop")
+    reason: str = Field(..., description="Human-readable explanation of the overall severity")
+
+
 class PipelineResult(BaseModel):
     image_path: str
     image_width: int
     image_height: int
     num_damages: int
     regions: list[RegionResult]
-    overall_severity: str = Field(..., description="Worst severity across all regions")
+    overall_severity: str = Field(..., description="Vehicle-level severity after aggregation")
     overall_routing: str  = Field(..., description="Most cautious routing across all regions")
+    aggregation: Aggregation
     detection_time_ms: float
     severity_time_ms: float
     total_time_ms: float
@@ -117,6 +151,78 @@ def worst_routing(routings: list[str]) -> str:
 
 def worst_severity(severities: list[str]) -> str:
     return max(severities, key=lambda s: SEVERITY_ORDER.get(s, -1), default="mild")
+
+
+def _union_coverage(regions: list["RegionResult"], image_w: int, image_h: int) -> float:
+    """Fraction of the image area covered by the union of damage boxes.
+
+    Uses a coarse grid rasterisation so overlapping boxes are not double-counted
+    (cheap, deterministic, and accurate enough for an escalation signal)."""
+    if not regions or image_w <= 0 or image_h <= 0:
+        return 0.0
+    grid = 100
+    cells = [[False] * grid for _ in range(grid)]
+    for r in regions:
+        x1, y1, x2, y2 = r.bbox_xyxy
+        gx1 = max(0, int(x1 / image_w * grid))
+        gy1 = max(0, int(y1 / image_h * grid))
+        gx2 = min(grid, int(x2 / image_w * grid) + 1)
+        gy2 = min(grid, int(y2 / image_h * grid) + 1)
+        for gy in range(gy1, gy2):
+            for gx in range(gx1, gx2):
+                cells[gy][gx] = True
+    covered = sum(row.count(True) for row in cells)
+    return covered / (grid * grid)
+
+
+def aggregate_severity(regions: list["RegionResult"], image_w: int, image_h: int) -> Aggregation:
+    """Roll per-crop severities up to a vehicle-level severity.
+
+    Escalates beyond the worst single crop when damage is widespread: many
+    damaged components (damage_score) or a large damaged area (coverage) both
+    push toward severe / total-loss, mirroring how insurers sum repair costs."""
+    scored = [r for r in regions if r.severity]
+    if not scored:
+        return Aggregation(overall="unknown", damage_score=0, coverage=0.0, counts={},
+                           worst_individual="unknown", escalated=False,
+                           reason="No damage regions with severity to assess.")
+
+    sevs   = [r.severity.severity for r in scored]
+    counts = dict(Counter(sevs))
+    score  = sum(SEVERITY_POINTS.get(s, 0) for s in sevs)
+    coverage = _union_coverage(scored, image_w, image_h)
+    worst  = worst_severity(sevs)
+
+    # Determine aggregate severity from the strongest of three signals.
+    if counts.get("severe", 0) >= 1 or score >= SCORE_SEVERE or coverage >= COVERAGE_SEVERE:
+        overall = "severe"
+    elif counts.get("moderate", 0) >= 1 or score >= SCORE_MODERATE or coverage >= COVERAGE_MODERATE:
+        overall = "moderate"
+    else:
+        overall = "mild"
+
+    escalated = SEVERITY_ORDER[overall] > SEVERITY_ORDER[worst]
+
+    # Build an audit-friendly reason string.
+    parts = []
+    if counts.get("severe", 0):
+        parts.append(f"{counts['severe']} severe region(s)")
+    if counts.get("moderate", 0):
+        parts.append(f"{counts['moderate']} moderate region(s)")
+    if counts.get("mild", 0):
+        parts.append(f"{counts['mild']} mild region(s)")
+    detail = ", ".join(parts)
+    if escalated:
+        reason = (f"{len(scored)} damages ({detail}); damage score {score}, "
+                  f"{coverage:.0%} of vehicle area affected → escalated to "
+                  f"{overall.upper()} (worst single crop was {worst}).")
+    else:
+        reason = (f"{len(scored)} damages ({detail}); damage score {score}, "
+                  f"{coverage:.0%} of vehicle area affected → {overall.upper()}.")
+
+    return Aggregation(overall=overall, damage_score=score, coverage=round(coverage, 3),
+                       counts=counts, worst_individual=worst,
+                       escalated=escalated, reason=reason)
 
 
 # ---------------------------------------------------------------------------
@@ -264,11 +370,16 @@ def run_image(
     detection, det_ms = _detect(yolo_model, image_path, out_dir, detection_conf, annotate)
     regions, sev_ms   = _classify_regions(detection, severity_model, device)
 
-    severities = [r.severity.severity for r in regions if r.severity]
-    routings   = [r.severity.routing  for r in regions if r.severity]
+    routings = [r.severity.routing for r in regions if r.severity]
 
-    overall_sev     = worst_severity(severities)   if severities else "unknown"
-    overall_routing = worst_routing(routings)       if routings   else "human_review"
+    aggregation     = aggregate_severity(regions, detection.image_width, detection.image_height)
+    overall_sev     = aggregation.overall
+    overall_routing = worst_routing(routings) if routings else "human_review"
+
+    # A vehicle-level escalation means no single crop was confidently severe —
+    # high-stakes total-loss calls must always be reviewed by a human.
+    if aggregation.escalated:
+        overall_routing = "human_review"
 
     if annotate:
         annotated_path = _annotate(image_path, regions, out_dir)
@@ -283,6 +394,7 @@ def run_image(
         regions=regions,
         overall_severity=overall_sev,
         overall_routing=overall_routing,
+        aggregation=aggregation,
         detection_time_ms=round(det_ms, 1),
         severity_time_ms=round(sev_ms, 1),
         total_time_ms=round(total_ms, 1),
@@ -299,6 +411,7 @@ def _print_result(result: PipelineResult) -> None:
     print(f"\nImage    : {Path(result.image_path).name}")
     print(f"Damages  : {result.num_damages}")
     print(f"Overall  : {result.overall_severity.upper()}  [{result.overall_routing}]")
+    print(f"Reason   : {result.aggregation.reason}")
     print(f"Timing   : detection={result.detection_time_ms:.0f}ms  "
           f"severity={result.severity_time_ms:.0f}ms  "
           f"total={result.total_time_ms:.0f}ms")
